@@ -99,6 +99,10 @@ class WordManagementService(AbstractWordManagementService):
         if result is None:
             msg = f"Word not found after add: {phrase}"
             raise RuntimeError(msg)
+        target_lang = self._get_target_lang()
+        selected_translation = self.word_repo.get_translation(result.id, target_lang)
+        result.translation = selected_translation.translation if selected_translation else ""
+        result.language_code = target_lang if selected_translation else ""
         return result
 
     def get_words(

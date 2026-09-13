@@ -116,3 +116,19 @@ class TestReviewService:
         service = ReviewService(word_repo, stats_repo, settings_service)
 
         assert service.get_next_word().id == 2
+
+    def test_fewer_reviews_wins_beyond_candidate_limit(self, word_service, review_service, test_db):
+        from infrastructure.models import History, WordStats
+
+        for index in range(50):
+            word = word_service.add_word(f"old{index}", "translation")
+            test_db.session.add(WordStats(word_id=word.id, last_reviewed=1))
+            test_db.session.add_all([
+                History(word_id=word.id, reviewed_at=timestamp) for timestamp in (1, 2)
+            ])
+        newer = word_service.add_word("newer", "translation")
+        test_db.session.add(WordStats(word_id=newer.id, last_reviewed=100))
+        test_db.session.add(History(word_id=newer.id, reviewed_at=100))
+        test_db.commit()
+
+        assert review_service.get_next_word().id == newer.id

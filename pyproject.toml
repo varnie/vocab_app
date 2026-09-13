@@ -28,20 +28,20 @@ select = [
     "RUF",   # Ruff-specific rules
 ]
 [tool.ruff.lint.per-file-ignores]
-"src/infrastructure/tray/tray_macos.py" = ["N802"]  # ObjC protocol
-"src/vocab_gui.py" = ["E402"]  # gi.require_version must precede GTK import
-"src/windows/*.py" = ["E402"]  # gi.require_version must precede GTK import
-"src/infrastructure/tray/tray_linux.py" = ["E402"]  # gi.require_version must precede GTK import
-"src/infrastructure/clipboard.py" = ["S404"]  # subprocess used safely
-"src/infrastructure/notifications.py" = ["S404"]  # subprocess used safely
-"src/infrastructure/tray/__init__.py" = ["RUF067"]  # conditional imports needed
-"src/repositories/__init__.py" = ["RUF067"]  # factory registration needed
+"src/infrastructure/tray/tray_macos.py" = ["invalid-function-name"]  # ObjC protocol
+"src/vocab_gui.py" = ["module-import-not-at-top-of-file"]  # gi.require_version must precede GTK import
+"src/windows/*.py" = ["module-import-not-at-top-of-file"]  # gi.require_version must precede GTK import
+"src/infrastructure/tray/tray_linux.py" = ["module-import-not-at-top-of-file"]  # gi.require_version must precede GTK import
+"src/infrastructure/clipboard.py" = ["suspicious-subprocess-import"]  # subprocess used safely
+"src/infrastructure/notifications.py" = ["suspicious-subprocess-import"]  # subprocess used safely
+"src/infrastructure/tray/__init__.py" = ["non-empty-init-module"]  # conditional imports needed
+"src/repositories/__init__.py" = ["non-empty-init-module"]  # factory registration needed
 "src/tests/**/*.py" = [
-    "S101",   # assert — standard in pytest
-    "S108",   # /tmp paths — all mocked in tests
-    "SIM117", # nested with — stylistic, tests prefer readability
-    "RUF001", # Cyrillic in test data — intentional
-    "RUF069", # float equality 2.5 — exact init value, not computed
+    "assert",   # assert — standard in pytest
+    "hardcoded-temp-file",   # /tmp paths — all mocked in tests
+    "multiple-with-statements", # nested with — stylistic, tests prefer readability
+    "ambiguous-unicode-character-string", # Cyrillic in test data — intentional
+    "float-equality-comparison", # float equality 2.5 — exact init value, not computed
 ]
-"src/application/__init__.py" = ["RUF067"]  # non-trivial code, not just re-exports
-"src/windows/__init__.py" = ["RUF067"]  # shared GTK helpers by design
+"src/application/__init__.py" = ["non-empty-init-module"]  # non-trivial code, not just re-exports
+"src/windows/__init__.py" = ["non-empty-init-module"]  # shared GTK helpers by design

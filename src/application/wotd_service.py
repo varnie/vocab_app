@@ -90,7 +90,7 @@ class WOTDService(AbstractWOTDService):
         translation = None
         for candidate in self.word_service.get_words(search=entry.word):
             if candidate.phrase == entry.word:
-                translation = candidate.translation or None
+                translation = self.word_service.get_translation(candidate.id) or None
                 break
         return (entry.word, translation, entry.level)
 

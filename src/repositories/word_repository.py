@@ -1,12 +1,14 @@
 """Word repository - handles word CRUD operations."""
 
 
+from sqlalchemy import func
 from sqlalchemy.orm import contains_eager, joinedload
 
 from config import DEFAULT_TARGET_LANG
 from domain.entities import Translation, Word
 from domain.repositories import AbstractWordRepository
 from infrastructure import mappers
+from infrastructure.models import History as ORMHistory
 from infrastructure.models import Language as ORMLanguage
 from infrastructure.models import Translation as ORMTranslation
 from infrastructure.models import Word as ORMWord
@@ -96,10 +98,19 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         return [mappers.map_word_with_details(w) for w in orm_words]
 
     def get_for_review(self, limit: int = 20, target_lang: str | None = None) -> list[Word]:
-        """Get words ordered by least recently seen first (oldest review first)."""
+        """Get words ordered by review count, then oldest review, before limiting."""
+        review_counts = (
+            self.db.session.query(
+                ORMHistory.word_id,
+                func.count(ORMHistory.id).label("review_count"),
+            )
+            .group_by(ORMHistory.word_id)
+            .subquery()
+        )
         query = (
             self.db.session.query(ORMWord)
             .outerjoin(ORMWordStats)
+            .outerjoin(review_counts, review_counts.c.word_id == ORMWord.id)
             .options(joinedload(ORMWord.stats))
         )
 
@@ -124,7 +135,11 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
                 joinedload(ORMWord.translations).joinedload(ORMTranslation.language)
             )
 
-        orm_words = query.order_by(ORMWordStats.last_reviewed.asc().nullsfirst()).limit(limit).all()
+        orm_words = query.order_by(
+            func.coalesce(review_counts.c.review_count, 0),
+            ORMWordStats.last_reviewed.asc().nullsfirst(),
+            ORMWord.id,
+        ).limit(limit).all()
         return [mappers.map_word_with_details(w) for w in orm_words]
 
     def delete(self, phrase: str) -> None:

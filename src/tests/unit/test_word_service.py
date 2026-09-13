@@ -129,3 +129,25 @@ class TestWordManagementService:
         """Test getting language abbreviation."""
         abbrev = word_service.get_language_abbreviation("ru")
         assert abbrev == "RU"
+
+    def test_add_word_returns_selected_language(self, word_service, settings_service):
+        settings_service.set_setting("target_lang", "ru")
+        word_service.add_word("hello", "privet")
+        settings_service.set_setting("target_lang", "es")
+
+        word = word_service.add_word("hello", "hola")
+
+        assert word.translation == "hola"
+        assert word.language_code == "es"
+        settings_service.set_setting("target_lang", "ru")
+        assert word_service.get_translation(word.id) == "privet"
+
+    def test_add_without_translation_does_not_return_another_language(self, word_service, settings_service):
+        settings_service.set_setting("target_lang", "ru")
+        word_service.add_word("hello", "privet")
+        settings_service.set_setting("target_lang", "es")
+
+        word = word_service.add_word("hello")
+
+        assert word.translation == ""
+        assert word.language_code == ""

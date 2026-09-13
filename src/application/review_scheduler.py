@@ -168,8 +168,9 @@ class ReviewScheduler:
 
                 now = time.time()
                 if now < current_paused:
-                    wait_time = int(current_paused - now)
+                    wait_time = current_paused - now
                     self._settings_changed.wait(min(wait_time, 60))
+                    self._settings_changed.clear()
                     continue
 
                 word = self.review_service.get_next_word()

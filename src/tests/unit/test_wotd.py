@@ -49,6 +49,7 @@ class TestGetTodayDisplay:
         repo.get_today.return_value = entry
         word_service = MagicMock()
         word_service.get_words.return_value = candidates
+        word_service.get_translation.return_value = candidates[0].translation if candidates else None
         return WOTDService(MagicMock(), repo, word_service, MagicMock(), MagicMock())
 
     def test_none_when_not_shown_yet(self):
@@ -188,3 +189,26 @@ class TestLocalWordSource:
         ):
             source = LocalWordSource()
             assert source.words == {"A1": ["good"]}
+
+
+def test_wotd_uses_selected_language(word_service, settings_service):
+    settings_service.set_setting("target_lang", "ru")
+    word_service.add_word("hello", "privet")
+    settings_service.set_setting("target_lang", "es")
+    settings_service.set_setting("wotd_enabled", "true")
+    repo = MagicMock()
+    repo.get_today.return_value = None
+    translator = MagicMock()
+    translator.translate.return_value = "hola"
+    source = MagicMock()
+    source.get_word.return_value = {"word": "hello", "level": "A1"}
+    service = WOTDService(settings_service, repo, word_service, translator, source)
+
+    word = service.get_word_of_the_day()
+
+    assert word.translation == "hola"
+    assert word.language_code == "es"
+    repo.get_today.return_value = WOTDHistory(word="hello", level="A1")
+    assert service.get_today_display() == ("hello", "hola", "A1")
+    settings_service.set_setting("target_lang", "ru")
+    assert service.get_today_display() == ("hello", "privet", "A1")
