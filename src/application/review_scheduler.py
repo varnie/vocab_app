@@ -5,13 +5,11 @@ import threading
 import time
 from typing import Callable
 
-from application.current_phrase import read_current_phrase, write_current_phrase
 from application.notification_service import format_word_body
 from application.service_interfaces import (
     AbstractNotificationService,
     AbstractReviewService,
     AbstractSettingsService,
-    AbstractWordManagementService,
     AbstractWOTDService,
 )
 
@@ -32,16 +30,18 @@ class ReviewScheduler:
         review_service: AbstractReviewService,
         wotd_service: AbstractWOTDService,
         settings_service: AbstractSettingsService,
-        word_service: AbstractWordManagementService,
-        notify_callback: Callable[[str], None],
+        notify_callback: Callable[..., None],
         label_callback: Callable[[str], None],
+        notification_service: AbstractNotificationService,
+        read_phrase: Callable[[], str | None],
+        write_phrase: Callable[[str], None],
         cleanup_callback: Callable[[], None] | None = None,
-        notification_service: AbstractNotificationService | None = None,
     ) -> None:
         self.review_service = review_service
         self.wotd_service = wotd_service
         self.settings_service = settings_service
-        self.word_service = word_service
+        self._read_phrase = read_phrase
+        self._write_phrase = write_phrase
         self._notify = notify_callback
         self._update_label = label_callback
         self._cleanup_session = cleanup_callback or (lambda: None)
@@ -96,7 +96,7 @@ class ReviewScheduler:
 
     def get_current_phrase(self) -> str | None:
         """Get current word from temp file or in-memory current_word."""
-        phrase = read_current_phrase()
+        phrase = self._read_phrase()
         if phrase:
             return phrase
         with self._state_lock:
@@ -107,18 +107,7 @@ class ReviewScheduler:
         if not word:
             return
 
-        if self._notification_service is not None:
-            body = self._notification_service.build_for_word(word)
-            self._notify(body)
-            return
-
-        translation, trans_lang = self.word_service.get_translation_with_lang(word.id)
-        abbrev = self.word_service.get_language_abbreviation(trans_lang) if trans_lang else "—"
-
-        body = format_word_body(word.phrase, translation, abbrev)
-
-        write_current_phrase(word.phrase)
-        self.review_service.review_word(word.id)
+        body = self._notification_service.build_for_word(word)
         self._notify(body)
 
     def _check_wotd(self) -> None:
@@ -126,7 +115,7 @@ class ReviewScheduler:
         try:
             word = self.wotd_service.get_word_of_the_day()
             if word:
-                write_current_phrase(word.phrase)
+                self._write_phrase(word.phrase)
                 body = format_word_body(word.phrase, word.translation, None)
                 self._notify(body, "Word of the Day")
         except Exception as e:

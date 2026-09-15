@@ -51,18 +51,6 @@ class StatsRepository(AbstractStatsRepository, AbstractRepository):
         self.commit()
         return mappers.map_history(orm_history)
 
-    def get_review_counts(self, word_ids: list[int]) -> dict[int, int]:
-        """Get review counts for multiple words in one query."""
-        if not word_ids:
-            return {}
-        rows = (
-            self.db.session.query(ORMHistory.word_id, func.count(ORMHistory.id))
-            .filter(ORMHistory.word_id.in_(word_ids))
-            .group_by(ORMHistory.word_id)
-            .all()
-        )
-        return {row[0]: row[1] for row in rows}
-
     def get_stats(self) -> Stats:
         """Get overall statistics."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)

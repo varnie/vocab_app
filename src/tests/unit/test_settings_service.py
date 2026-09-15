@@ -64,3 +64,18 @@ class TestSettingsService:
         """Invalid stored review interval falls back to default instead of raising."""
         settings_service.set_setting("review_interval", "not-a-number")
         assert settings_service.get_review_interval() == 3600
+
+    def test_bulk_settings_use_same_invalid_value_fallback(self, settings_service):
+        settings_service.set_setting("review_interval", "invalid")
+        assert settings_service.get_settings()["review_interval"] == settings_service.get_review_interval()
+
+    def test_returned_settings_cannot_mutate_service_state(self, settings_service):
+        snapshot = settings_service.get_settings()
+        snapshot["target_lang"] = "es"
+        assert settings_service.get_settings()["target_lang"] == "ru"
+
+    def test_initialize_defaults_preserves_preferences(self, settings_service):
+        settings_service.set_setting("target_lang", "es")
+        settings_service.initialize_defaults()
+        assert settings_service.get_target_lang() == "es"
+        assert settings_service.get_setting("review_interval") == "3600"

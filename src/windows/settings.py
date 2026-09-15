@@ -1,16 +1,12 @@
 """Settings window."""
 
 import os
-import shutil
-from dataclasses import dataclass
-from enum import Enum, auto
 
 import gi
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
-from application import get_db_path
 from application.service_interfaces import CEFR_LEVELS
 from config import (
     DATA_DIR_KEY,
@@ -25,40 +21,14 @@ from config import (
     TRANSLATION_PROVIDER_KEY,
     WOTD_ENABLED_KEY,
     WOTD_LEVEL_KEY,
-    read_config,
-    write_config,
 )
-from constants import DEFAULT_DATA_DIR, DEFAULT_DB_PATH, IS_MACOS
+from constants import DEFAULT_DATA_DIR, IS_MACOS
 from infrastructure.autostart import AutostartManager
+from infrastructure.config_file import read_config, write_config
+from infrastructure.data_relocation import DataDirChoice, RelocationVerdict, relocate_database
 from infrastructure.translation import ProviderRegistry
 from version import get_version
 from windows import BaseWindow, padded_box, show_message
-
-
-class DataDirChoice(Enum):
-    """User decision on what to do with the existing vocabulary."""
-
-    MOVE = auto()
-    START_EMPTY = auto()
-    CANCEL = auto()
-
-
-class RelocationVerdict(Enum):
-    """Outcome of a database relocation attempt."""
-
-    NOTHING_TO_DO = auto()
-    MOVED = auto()
-    START_EMPTY = auto()
-    CANCELLED = auto()
-    FAILED = auto()
-
-
-@dataclass(frozen=True)
-class RelocationResult:
-    """Result of a database relocation: verdict plus error details on failure."""
-
-    verdict: RelocationVerdict
-    error: str = ""
 
 
 class SettingsWindow(BaseWindow):
@@ -371,43 +341,6 @@ class SettingsWindow(BaseWindow):
             return DataDirChoice.START_EMPTY
         return DataDirChoice.CANCEL
 
-    def _relocate_database(self, new_data_dir: str) -> RelocationResult:
-        """Move the active DB file to the new data dir, or confirm a fresh start."""
-        old_db_path = get_db_path(self.config_file) if self.config_file else DEFAULT_DB_PATH
-        new_db_path = (
-            os.path.join(os.path.expanduser(new_data_dir), "vocab.db")
-            if new_data_dir.strip()
-            else DEFAULT_DB_PATH
-        )
-        if os.path.abspath(old_db_path) == os.path.abspath(new_db_path):
-            return RelocationResult(RelocationVerdict.NOTHING_TO_DO)
-        if not os.path.exists(old_db_path):
-            # No existing vocabulary; a fresh DB is created on restart.
-            return RelocationResult(RelocationVerdict.NOTHING_TO_DO)
-
-        choice = self._ask_data_dir_choice()
-        if choice is DataDirChoice.CANCEL:
-            return RelocationResult(RelocationVerdict.CANCELLED)
-        if choice is DataDirChoice.START_EMPTY:
-            return RelocationResult(RelocationVerdict.START_EMPTY)
-        try:
-            target_dir = os.path.dirname(new_db_path)
-            if target_dir:
-                os.makedirs(target_dir, exist_ok=True)
-            if os.path.exists(new_db_path):
-                return RelocationResult(
-                    RelocationVerdict.FAILED,
-                    "A database already exists at the new location:\n"
-                    f"{new_db_path}\nMove cancelled — nothing was changed.",
-                )
-            shutil.move(old_db_path, new_db_path)
-            return RelocationResult(RelocationVerdict.MOVED)
-        except OSError as e:
-            return RelocationResult(
-                RelocationVerdict.FAILED,
-                f"Could not move the database:\n{old_db_path}\n→ {new_db_path}\n{e}",
-            )
-
     def on_save_settings(self, widget: Gtk.Widget) -> None:
         """Save settings."""
         settings = {
@@ -429,7 +362,7 @@ class SettingsWindow(BaseWindow):
             old_data_dir = config.get(DATA_DIR_KEY, "")
             if old_data_dir != new_data_dir:
                 data_dir_changed = True
-                result = self._relocate_database(new_data_dir)
+                result = relocate_database(self.config_file, new_data_dir, self._ask_data_dir_choice)
                 if result.verdict is RelocationVerdict.CANCELLED:
                     return
                 if result.verdict is RelocationVerdict.MOVED:

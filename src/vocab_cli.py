@@ -4,10 +4,10 @@
 import argparse
 import sys
 
-from application import create_vocab_service
-from application.current_phrase import clear_current_phrase, read_current_phrase, write_current_phrase
+from bootstrap import create_vocab_service
 from constants import CONFIG_FILE
 from infrastructure.clipboard import get_clipboard_text
+from infrastructure.current_phrase import clear_current_phrase, read_current_phrase, write_current_phrase
 from infrastructure.notifications import send_notification
 
 

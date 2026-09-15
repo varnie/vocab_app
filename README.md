@@ -147,7 +147,7 @@ Words are shown fewest-reviews-first — never-reviewed words first, then oldest
 src/
 ├── application/           # Service layer (business logic)
 │   ├── factory.py         # ServiceFactory - creates services with DI
-│   ├── export_service.py  # CSV export
+│   ├── export_service.py  # Export use case with injected CSV writer
 │   ├── notification_service.py
 │   ├── review_scheduler.py  # Background review loop + pause/WOTD
 │   ├── review_service.py  # Review scheduling
@@ -179,25 +179,30 @@ src/
 │   ├── word_repository.py
 │   └── wotd_repository.py
 │
+├── bootstrap.py          # Composition root and startup initialization
 ├── vocab_gui.py          # GTK3 GUI entry point
 └── vocab_cli.py          # CLI entry point (hotkeys)
 ```
 
-### Design Patterns Used
+### Dependency boundaries
 
-- **Dependency Injection**: Services receive dependencies via constructor
-- **Factory Pattern**: `ServiceFactory` creates services with proper DI
-- **Repository Pattern**: Abstract data access via interfaces
-- **Facade Pattern**: `VocabService` provides unified API
-- **Single Responsibility**: Each service handles one domain
+`bootstrap.py` is the composition root used by the GUI and CLI. It creates the
+SQLite repositories and external adapters, initializes defaults, and injects
+them into application services. Importing `application` does not load GTK,
+SQLAlchemy, translation clients, or filesystem adapters.
 
-### SOLID Principles
+The domain contains entities and repository contracts. Application services
+coordinate use cases through those contracts and injected callbacks. Concrete
+storage, JSON configuration, current-phrase state, CSV output, translation,
+clipboard, notifications, and database relocation live in outer adapters.
+Settings keys and defaults remain in the dependency-free `config.py` module.
 
-- **S**ingle Responsibility: Each class has one reason to change
-- **O**pen/Closed: Extend via interfaces, not modification
-- **L**iskov Substitution: All implementations follow abstract interfaces
-- **I**nterface Segregation: Small, focused interfaces
-- **D**ependency Inversion: Depend on abstractions, not implementations
+Review ordering is owned by the repository query, notification review tracking
+by `NotificationService`, and settings normalization by the typed settings
+getters. All services created by one factory share one settings service.
+
+See [the project-wide architecture review](docs/architecture-review.md) for the
+SOLID, Clean Architecture, KISS, and DRY assessment and validation limits.
 
 ## Testing
 

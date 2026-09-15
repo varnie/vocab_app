@@ -38,6 +38,7 @@ class MacOSTray:
         if os.path.exists(icon_path):
             image = NSImage.alloc().initWithContentsOfFile_(icon_path)
             if image:
+                image.setSize_((22, 22))
                 image.setTemplate_(True)
                 button.setImage_(image)
         else:

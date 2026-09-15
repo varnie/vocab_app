@@ -1,6 +1,7 @@
 """Notification service - handles notification logic."""
 
-from application.current_phrase import write_current_phrase
+from typing import Callable
+
 from application.service_interfaces import (
     AbstractNotificationService,
     AbstractReviewService,
@@ -25,9 +26,11 @@ class NotificationService(AbstractNotificationService):
         self,
         review_service: AbstractReviewService,
         word_service: AbstractWordManagementService,
+        write_phrase: Callable[[str], None],
     ):
         self._review = review_service
         self._word = word_service
+        self._write_phrase = write_phrase
 
     def format_for_word(self, word: Word) -> str:
         """Build a notification body for a word (no side effects)."""
@@ -38,7 +41,7 @@ class NotificationService(AbstractNotificationService):
     def build_for_word(self, word: Word) -> str:
         """Build a notification body, track the phrase and mark reviewed."""
         body = self.format_for_word(word)
-        write_current_phrase(word.phrase)
+        self._write_phrase(word.phrase)
         self._review.review_word(word.id)
         return body
 

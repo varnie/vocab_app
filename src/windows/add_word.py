@@ -5,9 +5,9 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from application.current_phrase import write_current_phrase
 from config import DEFAULT_SOURCE_LANG, DEFAULT_TARGET_LANG, SOURCE_LANG_KEY, TARGET_LANG_KEY
 from domain.exceptions import TranslationError
+from infrastructure.current_phrase import write_current_phrase
 from windows import BaseWindow, padded_box, show_message
 
 

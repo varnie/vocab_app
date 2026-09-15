@@ -7,7 +7,7 @@ from application.review_scheduler import ReviewScheduler
 
 def test_pause_wait_blocks_again_after_consuming_wakeup():
     scheduler = ReviewScheduler(
-        MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
     )
     scheduler.running = True
     scheduler.on_pause()

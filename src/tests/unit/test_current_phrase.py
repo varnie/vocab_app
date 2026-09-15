@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from application import current_phrase
+from infrastructure import current_phrase
 
 
 @pytest.fixture

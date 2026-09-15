@@ -1,6 +1,7 @@
 """Abstract service interfaces - application layer defines contracts."""
 
 from abc import ABC, abstractmethod
+from typing import Protocol
 
 from config import (
     DEFAULT_REVIEW_INTERVAL,
@@ -15,6 +16,14 @@ from config import (
 from domain.entities import Word
 
 CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
+
+
+class SessionLifecycle(Protocol):
+    """Resource lifecycle required by the application facade."""
+
+    def close(self) -> None: ...
+
+    def remove_session(self) -> None: ...
 
 
 class WordSource(ABC):
@@ -153,7 +162,7 @@ class AbstractReviewService(ABC):
 
     @abstractmethod
     def review_word(self, word_id: int) -> None:
-        """Review a word (update last_reviewed and interval via SM-2)."""
+        """Record a review and update its last-reviewed timestamp."""
         pass
 
     @abstractmethod

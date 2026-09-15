@@ -1,7 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64">
-  <!-- Background circle -->
-  <circle cx="32" cy="32" r="30" fill="#4A90D9"/>
-  
-  <!-- Letter A -->
-  <text x="32" y="42" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="white" text-anchor="middle">Aa</text>
+  <title>Vocab — words into conversation</title>
+  <rect x="2" y="2" width="60" height="60" rx="18" fill="#087F8C"/>
+  <path d="M19 14h26a6 6 0 0 1 6 6v21a6 6 0 0 1-6 6H31L20 54v-7h-1a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z" fill="#FFFFFF"/>
+  <path d="m24 38 8-17 8 17M27 32h10" fill="none" stroke="#087F8C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

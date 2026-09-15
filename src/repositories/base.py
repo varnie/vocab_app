@@ -8,11 +8,6 @@ class AbstractDatabase(ABC):
     """Abstract database interface."""
 
     @abstractmethod
-    def __init__(self, **kwargs: object) -> None:
-        """Initialize database with optional configuration."""
-        pass
-
-    @abstractmethod
     def connect(self) -> None:
         """Connect to database."""
         pass

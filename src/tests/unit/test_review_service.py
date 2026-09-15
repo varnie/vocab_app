@@ -75,47 +75,31 @@ class TestReviewService:
         result = review_service.get_next_word()
         assert result is not None
 
-    def test_equal_counts_broken_by_oldest_last_reviewed(self):
-        """Sort contract is (review_count, last_reviewed): ties go to oldest."""
-        from unittest.mock import MagicMock
+    def test_equal_counts_broken_by_oldest_last_reviewed(self, word_service, review_service, test_db):
+        from infrastructure.models import History, WordStats
 
-        from application.review_service import ReviewService
-        from domain.entities import Word
+        newer = word_service.add_word("newer", "translation")
+        older = word_service.add_word("older", "translation")
+        for word, timestamp in ((newer, 200), (older, 100)):
+            test_db.session.add(WordStats(word_id=word.id, last_reviewed=timestamp))
+            test_db.session.add(History(word_id=word.id, reviewed_at=timestamp))
+        test_db.commit()
 
-        word_repo = MagicMock()
-        stats_repo = MagicMock()
-        settings_service = MagicMock()
-        settings_service.get_target_lang.return_value = "ru"
-        word_repo.get_for_review.return_value = [
-            Word(id=1, phrase="newer", last_reviewed=200),
-            Word(id=2, phrase="older", last_reviewed=100),
-        ]
-        stats_repo.get_review_counts.return_value = {1: 1, 2: 1}
+        assert review_service.get_next_word().id == older.id
 
-        service = ReviewService(word_repo, stats_repo, settings_service)
+    def test_fewer_reviews_beats_older_timestamp(self, word_service, review_service, test_db):
+        from infrastructure.models import History, WordStats
 
-        assert service.get_next_word().id == 2
+        older = word_service.add_word("older", "translation")
+        newer = word_service.add_word("newer", "translation")
+        for word, timestamp, count in ((older, 100, 5), (newer, 200, 1)):
+            test_db.session.add(WordStats(word_id=word.id, last_reviewed=timestamp))
+            test_db.session.add_all([
+                History(word_id=word.id, reviewed_at=timestamp) for _ in range(count)
+            ])
+        test_db.commit()
 
-    def test_fewer_reviews_beats_older_timestamp(self):
-        """Review count is the primary key, last_reviewed only breaks ties."""
-        from unittest.mock import MagicMock
-
-        from application.review_service import ReviewService
-        from domain.entities import Word
-
-        word_repo = MagicMock()
-        stats_repo = MagicMock()
-        settings_service = MagicMock()
-        settings_service.get_target_lang.return_value = "ru"
-        word_repo.get_for_review.return_value = [
-            Word(id=1, phrase="old-often-reviewed", last_reviewed=100),
-            Word(id=2, phrase="new-once-reviewed", last_reviewed=200),
-        ]
-        stats_repo.get_review_counts.return_value = {1: 5, 2: 1}
-
-        service = ReviewService(word_repo, stats_repo, settings_service)
-
-        assert service.get_next_word().id == 2
+        assert review_service.get_next_word().id == newer.id
 
     def test_fewer_reviews_wins_beyond_candidate_limit(self, word_service, review_service, test_db):
         from infrastructure.models import History, WordStats

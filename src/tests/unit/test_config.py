@@ -3,8 +3,9 @@
 import json
 from unittest.mock import mock_open, patch
 
-from config import DEFAULT_SETTINGS, read_config, write_config
+from config import DEFAULT_SETTINGS
 from domain.time_utils import today_start_ts
+from infrastructure.config_file import read_config, write_config
 
 
 class TestReadConfig:
@@ -12,28 +13,28 @@ class TestReadConfig:
 
     def test_read_config_file_not_exists(self):
         """Test that read_config returns empty dict when file doesn't exist."""
-        with patch("config.os.path.exists", return_value=False):
+        with patch("infrastructure.config_file.os.path.exists", return_value=False):
             result = read_config("/nonexistent/config.json")
             assert result == {}
 
     def test_read_config_valid_json(self):
         """Test that read_config reads valid JSON."""
         test_data = {"key": "value", "number": 123}
-        with patch("config.os.path.exists", return_value=True):
+        with patch("infrastructure.config_file.os.path.exists", return_value=True):
             with patch("builtins.open", mock_open(read_data=json.dumps(test_data))):
                 result = read_config("/tmp/config.json")
                 assert result == test_data
 
     def test_read_config_invalid_json(self):
         """Test that read_config returns empty dict on invalid JSON."""
-        with patch("config.os.path.exists", return_value=True):
+        with patch("infrastructure.config_file.os.path.exists", return_value=True):
             with patch("builtins.open", mock_open(read_data="invalid json")):
                 result = read_config("/tmp/config.json")
                 assert result == {}
 
     def test_read_config_exception_handling(self):
         """Test that read_config handles exceptions gracefully."""
-        with patch("config.os.path.exists", return_value=True):
+        with patch("infrastructure.config_file.os.path.exists", return_value=True):
             with patch("builtins.open", side_effect=PermissionError("No permission")):
                 result = read_config("/tmp/config.json")
                 assert result == {}
@@ -47,8 +48,8 @@ class TestWriteConfig:
         test_data = {"key": "value"}
         mock_file = mock_open()
         with patch("builtins.open", mock_file):
-            with patch("config.os.path.dirname", return_value="/tmp"):
-                with patch("config.os.makedirs"):
+            with patch("infrastructure.config_file.os.path.dirname", return_value="/tmp"):
+                with patch("infrastructure.config_file.os.makedirs"):
                     result = write_config("/tmp/config.json", test_data)
                     assert result is True
                     mock_file().write.assert_called()
@@ -57,8 +58,8 @@ class TestWriteConfig:
         """Test that write_config creates directory if needed."""
         test_data = {"key": "value"}
         with patch("builtins.open", mock_open()):
-            with patch("config.os.path.dirname", return_value="/tmp/subdir"):
-                with patch("config.os.makedirs") as mock_makedirs:
+            with patch("infrastructure.config_file.os.path.dirname", return_value="/tmp/subdir"):
+                with patch("infrastructure.config_file.os.makedirs") as mock_makedirs:
                     write_config("/tmp/subdir/config.json", test_data)
                     mock_makedirs.assert_called_once_with("/tmp/subdir", exist_ok=True)
 
@@ -66,9 +67,9 @@ class TestWriteConfig:
         """Test write_config when config_file has no directory."""
         test_data = {"key": "value"}
         with patch("builtins.open", mock_open()):
-            with patch("config.os.path.dirname", return_value=""):
-                with patch("config.os.makedirs") as mock_makedirs:
-                    result = write_config("config.json", test_data)
+            with patch("infrastructure.config_file.os.path.dirname", return_value=""):
+                with patch("infrastructure.config_file.os.makedirs") as mock_makedirs:
+                    result = write_config("infrastructure.config_file.json", test_data)
                     assert result is True
                     mock_makedirs.assert_not_called()
 

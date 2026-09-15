@@ -1,8 +1,10 @@
 """Vocabulary service - thin facade with auto-delegation."""
 
+from typing import Any
+
 from application.factory import ServiceFactory
+from application.service_interfaces import SessionLifecycle
 from domain.entities import Language
-from repositories.base import AbstractDatabase
 
 
 class VocabService:
@@ -14,13 +16,12 @@ class VocabService:
 
     def __init__(
         self,
-        db: AbstractDatabase,
+        db: SessionLifecycle,
         factory: ServiceFactory,
     ) -> None:
         self._db = db
 
         self.language_repo = factory.language_repo
-        self.language_repo.init_defaults()
 
         self.word_service = factory.create_word_service()
         self.review_service = factory.create_review_service()
@@ -33,7 +34,7 @@ class VocabService:
         )
         self.translation_test_service = factory.create_translation_test_service()
 
-    def __getattr__(self, name: str) -> None:
+    def __getattr__(self, name: str) -> Any:
         """Auto-delegate to services."""
         for svc in [
             self.word_service,

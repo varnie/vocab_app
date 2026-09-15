@@ -22,19 +22,8 @@ class ReviewService(AbstractReviewService):
     def get_next_word(self) -> Word | None:
         """Get next word for review - fewest reviews first, then least recently seen."""
         target_lang = self.settings_service.get_target_lang()
-        words = self.word_repo.get_for_review(limit=50, target_lang=target_lang)
-
-        if not words:
-            return None
-
-        word_ids = [w.id for w in words]
-        review_counts = self.stats_repo.get_review_counts(word_ids)
-
-        def sort_key(word: Word) -> tuple:
-            return (review_counts.get(word.id, 0), word.last_reviewed or 0)
-
-        sorted_words = sorted(words, key=sort_key)
-        return sorted_words[0]
+        words = self.word_repo.get_for_review(limit=1, target_lang=target_lang)
+        return words[0] if words else None
 
     def review_word(self, word_id: int) -> None:
         """Review a word - record review and update last_reviewed."""

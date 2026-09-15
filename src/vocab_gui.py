@@ -2,6 +2,7 @@
 """Main vocab GUI application with system tray."""
 
 import logging
+import os
 import sys
 
 import gi
@@ -9,10 +10,11 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gio, GLib, Gtk
 
-from application import create_vocab_service
 from application.review_scheduler import ReviewScheduler
-from config import DEFAULT_SETTINGS, GNOME_TRAY_WARNING_KEY
-from constants import CONFIG_FILE, IS_LINUX, IS_MACOS
+from bootstrap import create_vocab_service
+from config import GNOME_TRAY_WARNING_KEY
+from constants import CONFIG_FILE, ICONS_DIR, IS_LINUX, IS_MACOS
+from infrastructure.current_phrase import read_current_phrase, write_current_phrase
 from infrastructure.notifications import send_notification
 from windows.add_word import AddWordDialog
 from windows.settings import SettingsWindow
@@ -52,6 +54,7 @@ class VocabApp(Gtk.Application):
 
     def do_startup(self):
         Gtk.Application.do_startup(self)
+        Gtk.Window.set_default_icon_from_file(os.path.join(ICONS_DIR, "translate.svg"))
 
         # Keep app running even without windows (tray app)
         Gio.Application.hold(self)
@@ -75,16 +78,15 @@ class VocabApp(Gtk.Application):
             error_dialog.run()
             sys.exit(1)
 
-        self._init_default_settings()
-
         self.tray = _create_tray()
         self.tray.setup(self._menu_callbacks())
 
         self.scheduler = ReviewScheduler(
-            review_service=self.vocab_service,
-            wotd_service=self.vocab_service,
-            settings_service=self.vocab_service,
-            word_service=self.vocab_service,
+            review_service=self.vocab_service.review_service,
+            wotd_service=self.vocab_service.wotd_service,
+            settings_service=self.vocab_service.settings_service,
+            read_phrase=read_current_phrase,
+            write_phrase=write_current_phrase,
             notify_callback=self.notify,
             # ReviewScheduler invokes this callback from its worker thread.
             # GTK/AppIndicator widgets must only be updated on GTK's main loop.
@@ -152,12 +154,6 @@ class VocabApp(Gtk.Application):
     def notify(body: str, title: str = "Vocab") -> None:
         """Send notification with icon."""
         send_notification(body, title)
-
-    def _init_default_settings(self) -> None:
-        """Initialize default settings if not set."""
-        for key, value in DEFAULT_SETTINGS.items():
-            if self.vocab_service.get_setting(key) is None:
-                self.vocab_service.set_setting(key, value)
 
     def on_show_next(self, widget=None) -> None:
         """Show next word immediately."""

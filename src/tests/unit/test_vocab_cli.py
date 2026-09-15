@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from application import current_phrase
+from infrastructure import current_phrase
 from vocab_cli import run_cli
 
 

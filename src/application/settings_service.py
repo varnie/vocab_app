@@ -1,7 +1,5 @@
 """Settings service - handles application settings."""
 
-import time
-
 from application.service_interfaces import AbstractSettingsService
 from config import (
     DEFAULT_SETTINGS,
@@ -16,12 +14,8 @@ from domain.repositories import AbstractSettingsRepository
 class SettingsService(AbstractSettingsService):
     """Service for managing application settings."""
 
-    _CACHE_TTL = 30
-
     def __init__(self, settings_repo: AbstractSettingsRepository) -> None:
         self.settings_repo = settings_repo
-        self._cache: dict | None = None
-        self._cache_ts: float = 0
 
     def get_setting(self, key: str, default: str | None = None) -> str | None:
         """Get a single setting."""
@@ -30,28 +24,22 @@ class SettingsService(AbstractSettingsService):
 
     def set_setting(self, key: str, value: str) -> None:
         """Set a single setting."""
-        self._cache = None
         self.settings_repo.set(key, value)
 
     def get_settings(self) -> dict:
-        """Get app settings (cached with TTL)."""
-        now = time.time()
-        if self._cache and now - self._cache_ts < self._CACHE_TTL:
-            return self._cache
-
-        all_settings = self.settings_repo.get_all()
-
-        result = {
-            REVIEW_INTERVAL_KEY: int(all_settings.get(REVIEW_INTERVAL_KEY, DEFAULT_SETTINGS[REVIEW_INTERVAL_KEY])),
-            SOURCE_LANG_KEY: all_settings.get(SOURCE_LANG_KEY, DEFAULT_SETTINGS[SOURCE_LANG_KEY]),
-            TARGET_LANG_KEY: all_settings.get(TARGET_LANG_KEY, DEFAULT_SETTINGS[TARGET_LANG_KEY]),
-            TRANSLATION_PROVIDER_KEY: all_settings.get(
-                TRANSLATION_PROVIDER_KEY, DEFAULT_SETTINGS[TRANSLATION_PROVIDER_KEY]
-            ),
+        """Return typed values using the same defaults as individual getters."""
+        return {
+            REVIEW_INTERVAL_KEY: self.get_review_interval(),
+            SOURCE_LANG_KEY: self.get_source_lang(),
+            TARGET_LANG_KEY: self.get_target_lang(),
+            TRANSLATION_PROVIDER_KEY: self.get_translation_provider(),
         }
-        self._cache = result
-        self._cache_ts = now
-        return result
+
+    def initialize_defaults(self) -> None:
+        """Populate missing settings without replacing user preferences."""
+        for key, value in DEFAULT_SETTINGS.items():
+            if self.get_setting(key) is None:
+                self.set_setting(key, value)
 
     def save_settings(self, settings: dict) -> None:
         """Save app settings."""

@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from infrastructure.csv_export import write_vocabulary_csv
 from infrastructure.models import Base
 
 
@@ -107,13 +108,15 @@ def vocab_service(
     from application.factory import ServiceFactory
 
     factory = ServiceFactory(
-        db=test_db,
         word_repo=word_repo,
         stats_repo=stats_repo,
         settings_repo=settings_repo,
         language_repo=language_repo,
         wotd_repo=MagicMock(),  # Mock - not used in tests
         translation_service=mock_translation_service,
+        word_source=MagicMock(),
+        write_phrase=MagicMock(),
+        write_csv=write_vocabulary_csv,
     )
 
     from application.vocab_service import VocabService
@@ -164,7 +167,7 @@ def export_service(word_repo, settings_service):
     """Create ExportService for unit testing."""
     from application.export_service import ExportService
 
-    return ExportService(word_repo, settings_service)
+    return ExportService(word_repo, settings_service, write_vocabulary_csv)
 
 
 @pytest.fixture
