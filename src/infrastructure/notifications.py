@@ -18,7 +18,7 @@ def _escape_applescript_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\r", "\\r").replace("\n", "\\n")
 
 
-def send_notification(body: str, title: str = "Vocab") -> bool:
+def send_notification(body: str, title: str = "") -> bool:
     """Send system notification.
 
     Args:

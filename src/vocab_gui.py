@@ -106,7 +106,6 @@ class VocabApp(Gtk.Application):
                 self.notify(
                     "GNOME detected. If tray icon is missing, "
                     "install 'Top Icons' or 'Tray Icons' extension.",
-                    "Vocab",
                 )
                 self.vocab_service.set_setting(GNOME_TRAY_WARNING_KEY, "true")
 
@@ -151,7 +150,7 @@ class VocabApp(Gtk.Application):
         self._windows[key] = None
 
     @staticmethod
-    def notify(body: str, title: str = "Vocab") -> None:
+    def notify(body: str, title: str = "") -> None:
         """Send notification with icon."""
         send_notification(body, title)
 
