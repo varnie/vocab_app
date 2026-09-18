@@ -20,7 +20,7 @@ class ReviewService(AbstractReviewService):
         self.settings_service = settings_service
 
     def get_next_word(self) -> Word | None:
-        """Get next word for review - fewest reviews first, then least recently seen."""
+        """Get the next due exposure or a new word; no response is required."""
         target_lang = self.settings_service.get_target_lang()
         words = self.word_repo.get_for_review(limit=1, target_lang=target_lang)
         return words[0] if words else None

@@ -1,12 +1,14 @@
 """Word repository - handles word CRUD operations."""
 
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import contains_eager, joinedload
 
 from config import DEFAULT_TARGET_LANG
 from domain.entities import Translation, Word
 from domain.repositories import AbstractWordRepository
+from domain.review_policy import EXPOSURE_INTERVALS, NEW_WORD_SPACING
+from domain.time_utils import utc_now_ts
 from infrastructure import mappers
 from infrastructure.models import History as ORMHistory
 from infrastructure.models import Language as ORMLanguage
@@ -98,11 +100,20 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         return [mappers.map_word_with_details(w) for w in orm_words]
 
     def get_for_review(self, limit: int = 20, target_lang: str | None = None) -> list[Word]:
-        """Get words ordered by review count, then oldest review, before limiting."""
+        """Return due exposures, mixing in one new word per four notifications.
+
+        History represents exposure, not recall. Deriving the schedule from it
+        keeps the queue persistent across restarts without a schema migration.
+        """
+        if limit <= 0:
+            return []
+        now = utc_now_ts()
         review_counts = (
             self.db.session.query(
                 ORMHistory.word_id,
                 func.count(ORMHistory.id).label("review_count"),
+                func.max(ORMHistory.reviewed_at).label("last_shown"),
+                func.min(ORMHistory.id).label("first_id"),
             )
             .group_by(ORMHistory.word_id)
             .subquery()
@@ -135,11 +146,38 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
                 joinedload(ORMWord.translations).joinedload(ORMTranslation.language)
             )
 
-        orm_words = query.order_by(
-            func.coalesce(review_counts.c.review_count, 0),
-            ORMWordStats.last_reviewed.asc().nullsfirst(),
-            ORMWord.id,
-        ).limit(limit).all()
+        count = func.coalesce(review_counts.c.review_count, 0)
+        last_shown = func.coalesce(review_counts.c.last_shown, ORMWordStats.last_reviewed)
+        interval = case(
+            *((count <= index, seconds) for index, seconds in enumerate(EXPOSURE_INTERVALS, 1)),
+            else_=EXPOSURE_INTERVALS[-1],
+        )
+        # A legacy timestamp without history still represents a previous exposure.
+        unseen = (count == 0) & last_shown.is_(None)
+        due = query.filter(~unseen, last_shown + interval <= now)
+        # Relative overdue time makes a recently introduced word eligible before
+        # a mature word with the same last-shown time. Randomize exact ties only.
+        due = due.order_by(
+            ((now - last_shown) / interval).desc(), func.random(),
+        )
+
+        recent = self.db.session.query(
+            ORMHistory.id, review_counts.c.first_id,
+        ).join(review_counts, review_counts.c.word_id == ORMHistory.word_id)
+        if target_lang:
+            recent = recent.join(
+                ORMTranslation,
+                (ORMTranslation.word_id == ORMHistory.word_id)
+                & (ORMTranslation.language_id == lang.id),
+            )
+        recent = recent.order_by(ORMHistory.id.desc()).limit(NEW_WORD_SPACING - 1).all()
+        allow_new = not any(row.id == row.first_id for row in recent)
+        due_words = due.limit(limit).all()
+        new_words = []
+        if allow_new or not due_words:
+            # Stable FIFO prevents a bulk import from starving older unseen words.
+            new_words = query.filter(unseen).order_by(ORMWord.created_at, ORMWord.id).limit(1).all()
+        orm_words = (new_words + due_words)[:limit]
         return [mappers.map_word_with_details(w) for w in orm_words]
 
     def delete(self, phrase: str) -> None:

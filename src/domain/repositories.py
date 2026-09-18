@@ -41,7 +41,7 @@ class AbstractWordRepository(ABC):
 
     @abstractmethod
     def get_for_review(self, limit: int = 20, target_lang: str | None = None) -> list[Word]:
-        """Get next words ordered by fewest reviews, then least recently seen."""
+        """Get due exposures with a limited share of unseen words."""
         pass
 
     @abstractmethod

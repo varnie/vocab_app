@@ -6,7 +6,7 @@ A lightweight vocabulary learning app with system tray and spaced repetition. Su
 
 - **System tray**: Runs in background with tray icon
 - **Save phrases**: Select text anywhere, press a hotkey, done
-- **Spaced repetition**: Words with fewest reviews first, then least recently seen
+- **Passive word rotation**: Spaced exposures with a limited share of new words; no ratings required
 - **Auto-translation**: Automatic translation via multiple providers
 - **Multiple translation providers**: Google (direct), Google (deep-translator), MyMemory — with automatic fallback if one is blocked
 - **Stats dashboard**: See words learned, streak, reviews today
@@ -108,9 +108,26 @@ Configure via System Settings → Keyboard → Shortcuts → Services, or use to
 - **macOS default**: `~/Library/Application Support/vocab_app/vocab.db`
 - Can be changed in settings
 
-## Spaced Repetition
+## Passive Word Rotation
 
-Words are shown fewest-reviews-first — never-reviewed words first, then oldest `last_reviewed` timestamp. Reviewing a word simply records the timestamp and increments the review count.
+After successive exposures, a word becomes eligible again after 4 hours, 1 day,
+3 days, 7 days, then 14 days. The interval stays capped at 14 days: notification
+history does not prove that a word has been learned. No ratings or responses are required.
+
+The queue prioritizes words by time since exposure relative to their interval,
+randomizing exact ties. When due words are available, an unseen word is introduced
+only after three other exposures since the previous introduction. If no words are
+due, unseen words can fill the slots, oldest additions first. Only words with a
+translation in the selected target language are eligible.
+
+The configured notification cadence stays unchanged, including after a long
+absence. If nothing is eligible, no word notification is sent. Manual **Next**
+also respects the queue and can produce no notification while words are cooling
+down. Word of the Day uses its own schedule.
+
+The queue uses existing history and survives restarts without a database migration.
+Exposure history remains shared across translation languages. As before, history
+is recorded when a notification is prepared; it cannot confirm that you read it.
 
 ## Troubleshooting
 
@@ -138,7 +155,7 @@ Words are shown fewest-reviews-first — never-reviewed words first, then oldest
 ### General
 
 #### Words don't appear in review
-- The app shows all your words, fewest reviews first, then least recently seen
+- Words appear only when due; recently shown words may all be cooling down
 - Make sure your target language matches the translations you want to review
 
 ## Architecture
