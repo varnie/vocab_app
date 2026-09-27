@@ -6,9 +6,8 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 from config import DEFAULT_SOURCE_LANG, DEFAULT_TARGET_LANG, SOURCE_LANG_KEY, TARGET_LANG_KEY
-from domain.exceptions import TranslationError
 from infrastructure.current_phrase import write_current_phrase
-from windows import BaseWindow, padded_box, show_message
+from windows import BaseWindow, padded_box
 
 
 class AddWordDialog(BaseWindow):
@@ -18,6 +17,7 @@ class AddWordDialog(BaseWindow):
         super().__init__(title="Add New Word", width=400, height=250)
         self.vocab_service = vocab_service
         self.on_add = on_add
+        self._busy = False
 
         self.build_ui()
 
@@ -30,6 +30,8 @@ class AddWordDialog(BaseWindow):
         settings = self.vocab_service.get_settings()
         target_lang_code = settings.get(TARGET_LANG_KEY, DEFAULT_TARGET_LANG)
         source_lang_code = settings.get(SOURCE_LANG_KEY, DEFAULT_SOURCE_LANG)
+        self.target_lang = target_lang_code
+        self.source_lang = source_lang_code
 
         # Find language objects
         languages = self.vocab_service.get_languages()
@@ -68,47 +70,71 @@ class AddWordDialog(BaseWindow):
         btn_box.set_homogeneous(True)
 
         cancel_btn = Gtk.Button(label="Cancel")
-        cancel_btn.connect("clicked", lambda _: self.destroy())
+        cancel_btn.connect("clicked", lambda _: self.close())
         btn_box.pack_start(cancel_btn, True, True, 0)
 
-        add_btn = Gtk.Button(label="Add")
-        add_btn.connect("clicked", self.on_add_clicked)
-        btn_box.pack_start(add_btn, True, True, 0)
-
-        translate_btn = Gtk.Button(label="Add & Translate")
-        translate_btn.connect("clicked", self.on_add_translate)
-        btn_box.pack_start(translate_btn, True, True, 0)
+        self.save_btn = Gtk.Button(label="Save")
+        self.save_btn.get_style_context().add_class("suggested-action")
+        self.save_btn.connect("clicked", self.on_add_clicked)
+        btn_box.pack_start(self.save_btn, True, True, 0)
+        self.without_translation = Gtk.CheckButton(label="Save without translation")
+        box.pack_start(self.without_translation, False, False, 0)
+        self.spinner = Gtk.Spinner()
+        box.pack_start(self.spinner, False, False, 0)
+        self.status_label = Gtk.Label(xalign=0)
+        self.status_label.set_line_wrap(True)
+        box.pack_start(self.status_label, False, False, 0)
+        self.word_entry.connect("activate", self.on_add_clicked)
+        self.translation_entry.connect("activate", self.on_add_clicked)
+        self.connect("delete-event", lambda *_: self._busy)
+        self.word_entry.grab_focus()
 
         box.pack_start(btn_box, False, False, 10)
 
     def on_add_clicked(self, widget: Gtk.Widget) -> None:
-        """Add word with manual translation (no auto-translate)."""
+        """Save entered translation, or translate unless explicitly disabled."""
         translation = self.translation_entry.get_text().strip() or None
-        self._submit(translation, auto_translate=False)
-
-    def on_add_translate(self, widget: Gtk.Widget) -> None:
-        """Add word and auto-translate."""
-        self._submit(None, auto_translate=True)
+        if self.without_translation.get_active():
+            translation = None
+        self._submit(translation, auto_translate=not self.without_translation.get_active())
 
     def _submit(self, translation: str | None, auto_translate: bool) -> None:
         """Validate input, add the word, and close on success."""
         word = self.word_entry.get_text().strip()
+        if self._busy:
+            return
         if not word:
             self._show_error("Please enter a word or phrase")
             return
 
-        try:
-            self.vocab_service.add_word(word, translation, auto_translate=auto_translate)
-        except (ValueError, TranslationError) as e:
-            self._show_error(str(e))
-            return
+        self._busy = True
+        self.save_btn.set_sensitive(False)
+        self.word_entry.set_sensitive(False)
+        self.translation_entry.set_sensitive(False)
+        self.without_translation.set_sensitive(False)
+        self.spinner.start()
+        self.status_label.set_text("Saving…" if translation or not auto_translate else "Translating…")
 
-        write_current_phrase(word)
+        def complete(result, error):
+            self._busy = False
+            self.spinner.stop()
+            for control in (self.save_btn, self.word_entry, self.translation_entry, self.without_translation):
+                control.set_sensitive(True)
+            if error:
+                self._show_error(error)
+                return
+            write_current_phrase(result.phrase)
+            if self.on_add:
+                self.on_add(result.phrase)
+            self.destroy()
 
-        if self.on_add:
-            self.on_add(word)
-        self.destroy()
+        self.run_background(
+            lambda: self.vocab_service.add_word(
+                word, translation, auto_translate=auto_translate,
+                target_lang=self.target_lang, source_lang=self.source_lang,
+            ), complete
+        )
 
     def _show_error(self, message: str) -> None:
         """Show error dialog."""
-        show_message(self, Gtk.MessageType.ERROR, message)
+        self.status_label.set_text(message)

@@ -1,12 +1,12 @@
 """Statistics repository - handles review stats and history."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from sqlalchemy import func
 
 from domain.entities import History, Stats, WordStats
 from domain.repositories import AbstractStatsRepository
-from domain.time_utils import today_start_ts, utc_now_ts
+from domain.time_utils import local_today_start_ts, utc_now_ts
 from infrastructure import mappers
 from infrastructure.models import History as ORMHistory
 from infrastructure.models import Language as ORMLanguage
@@ -44,17 +44,24 @@ class StatsRepository(AbstractStatsRepository, AbstractRepository):
             return None
         return mappers.map_word_stats(orm)
 
-    def record_review(self, word_id: int) -> History:
+    def record_review(self, word_id: int, update_stats: bool = False) -> History:
         """Record a review in history and return domain entity."""
-        orm_history = ORMHistory(word_id=word_id)
+        now = utc_now_ts()
+        orm_history = ORMHistory(word_id=word_id, reviewed_at=now)
+        if update_stats:
+            stats = self.db.session.query(ORMWordStats).filter_by(word_id=word_id).first()
+            if stats is None:
+                stats = ORMWordStats(word_id=word_id)
+                self.db.session.add(stats)
+            stats.last_reviewed = now
         self.db.session.add(orm_history)
         self.commit()
         return mappers.map_history(orm_history)
 
     def get_stats(self) -> Stats:
         """Get overall statistics."""
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        today_start = today_start_ts()
+        now = datetime.now()
+        today_start = local_today_start_ts()
         today_date = now.date()
 
         db = self.db.session
@@ -85,9 +92,9 @@ class StatsRepository(AbstractStatsRepository, AbstractRepository):
 
         # Streak — single query for distinct review dates
         rows = (
-            db.query(func.date(ORMHistory.reviewed_at, "unixepoch").label("day"))
+            db.query(func.date(ORMHistory.reviewed_at, "unixepoch", "localtime").label("day"))
             .distinct()
-            .order_by(func.date(ORMHistory.reviewed_at, "unixepoch").desc())
+            .order_by(func.date(ORMHistory.reviewed_at, "unixepoch", "localtime").desc())
             .all()
         )
 

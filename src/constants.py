@@ -47,7 +47,7 @@ ICONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
 # Tray menu items: (label, callback_key) or None for separator
 MENU_ITEMS = [
     ("Show next word", "show_next"),
-    ("Pause (1 hour)", "pause"),
+    ("Pause / Resume…", "pause"),
     None,
     ("Add word", "add_word"),
     ("Words added today", "words_today"),

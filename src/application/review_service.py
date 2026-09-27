@@ -27,8 +27,10 @@ class ReviewService(AbstractReviewService):
 
     def review_word(self, word_id: int) -> None:
         """Review a word - record review and update last_reviewed."""
-        self.stats_repo.update_word_stats(word_id)
-        self.stats_repo.record_review(word_id)
+        self.stats_repo.record_review(word_id, update_stats=True)
+
+    def next_available_at(self) -> int | None:
+        return self.word_repo.next_available_at(self.settings_service.get_target_lang())
 
     def skip_word(self, word_id: int) -> None:
         """Skip word - record review without updating stats."""

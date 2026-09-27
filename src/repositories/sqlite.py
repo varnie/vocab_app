@@ -25,6 +25,7 @@ def _enable_foreign_keys(dbapi_connection, _connection_record) -> None:
 
     Registered on the Engine class so every pooled connection is covered.
     """
+    dbapi_connection.create_function("casefold", 1, lambda value: value.casefold() if value else "", deterministic=True)
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
@@ -65,6 +66,7 @@ class SQLiteDatabase(BaseDatabase):
         self._drop_legacy_columns()
         self._create_index("idx_history_reviewed_at", "history", "reviewed_at")
         self._create_index("idx_history_word_id", "history", "word_id")
+        self._create_index("idx_history_word_time", "history", "word_id", "reviewed_at")
         self._create_index("idx_translation_word_id", "translations", "word_id")
         self._create_index("idx_translation_language_id", "translations", "language_id")
         self._create_index("idx_translation_word_lang", "translations", "word_id", "language_id")

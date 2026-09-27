@@ -3,6 +3,7 @@
 
 import argparse
 import sys
+from datetime import datetime
 
 from bootstrap import create_vocab_service
 from constants import CONFIG_FILE
@@ -33,7 +34,7 @@ def run_cli():
                 if not result:
                     send_notification("No text selected")
                     return False
-                phrase = result.strip().lower()
+                phrase = result.strip()
                 word = vocab_service.add_word(phrase, auto_translate=True)
 
                 translation, trans_lang = vocab_service.get_translation_with_lang(word.id)
@@ -60,6 +61,13 @@ def run_cli():
             body = vocab_service.get_next_word_notification()
             if body:
                 send_notification(body)
+            else:
+                timestamp = vocab_service.next_available_at()
+                if isinstance(timestamp, (int, float)):
+                    when = datetime.fromtimestamp(timestamp).strftime("%d %b, %H:%M")
+                    send_notification(f"No words due yet. Next eligible word: {when}.")
+                else:
+                    send_notification("No words available. Add a word with a translation in the selected language.")
 
         return True
     finally:

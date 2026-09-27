@@ -17,6 +17,13 @@ class StatsWindow(BaseWindow):
 
         self.build_ui()
 
+    def refresh(self):
+        child = self.get_child()
+        if child:
+            child.destroy()
+        self.build_ui()
+        self.show_all()
+
     def build_ui(self) -> None:
         """Build the UI."""
         box = padded_box()
@@ -34,11 +41,11 @@ class StatsWindow(BaseWindow):
         box.pack_start(row, False, False, 0)
 
         # Reviews today
-        row = self._make_row("Reviews today:", str(stats.get("today_reviews", 0)))
+        row = self._make_row("Shown today:", str(stats.get("today_reviews", 0)))
         box.pack_start(row, False, False, 0)
 
         # Total reviews
-        row = self._make_row("Total reviews:", str(stats.get("total_reviews", 0)))
+        row = self._make_row("Total exposures:", str(stats.get("total_reviews", 0)))
         box.pack_start(row, False, False, 0)
 
         # Separator
@@ -58,6 +65,9 @@ class StatsWindow(BaseWindow):
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         export_btn = Gtk.Button(label="Export CSV")
         export_btn.connect("clicked", self.on_export)
+        refresh_btn = Gtk.Button(label="Refresh")
+        refresh_btn.connect("clicked", lambda _: self.refresh())
+        btn_box.pack_start(refresh_btn, True, True, 0)
         btn_box.pack_start(export_btn, True, True, 0)
         box.pack_start(btn_box, False, False, 0)
 
@@ -85,6 +95,7 @@ class StatsWindow(BaseWindow):
             ("Cancel", Gtk.ResponseType.CANCEL, "Save", Gtk.ResponseType.OK),
         )
         dialog.set_current_name("vocabulary.csv")
+        dialog.set_do_overwrite_confirmation(True)
 
         if dialog.run() == Gtk.ResponseType.OK:
             try:

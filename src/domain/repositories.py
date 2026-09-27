@@ -35,6 +35,9 @@ class AbstractWordRepository(ABC):
         limit: int | None = None,
         offset: int = 0,
         since: int | None = None,
+        sort: str = "phrase",
+        descending: bool = False,
+        untranslated: bool = False,
     ) -> list[Word]:
         """Get all words with stats."""
         pass
@@ -60,9 +63,17 @@ class AbstractWordRepository(ABC):
         pass
 
     @abstractmethod
-    def update_word(self, word_id: int, phrase: str) -> None:
+    def update_word(
+        self, word_id: int, phrase: str, translation: str | None = None, target_lang: str = "ru"
+    ) -> None:
         """Update word phrase."""
         pass
+
+    def snooze_word(self, word_id: int, until: int) -> None:
+        raise NotImplementedError
+
+    def next_available_at(self, target_lang: str) -> int | None:
+        raise NotImplementedError
 
     @abstractmethod
     def delete_by_id(self, word_id: int) -> None:
@@ -91,7 +102,7 @@ class AbstractStatsRepository(ABC):
         pass
 
     @abstractmethod
-    def record_review(self, word_id: int) -> History:
+    def record_review(self, word_id: int, update_stats: bool = False) -> History:
         """Record a review in history."""
         pass
 

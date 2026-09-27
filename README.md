@@ -16,9 +16,13 @@ A lightweight vocabulary learning app with system tray and spaced repetition. Su
 - **Autostart**: Automatically starts on login
 - **Multiple languages**: Support for 9 target languages
 - **Custom data directory**: Store database anywhere (e.g., Dropbox for sync)
+- **Quiet hours and snooze**: Pause automatic notifications until a chosen time, set quiet hours, or hide a word for seven days
+- **Responsive editing**: Background translation, preserved spelling, language-specific editing, and undo for the last deleted translation
 - **Cross-platform**: Works on Linux and macOS
 
 ## Screenshots
+
+Window contents below use demo vocabulary; decorations and theme depend on your desktop.
 
 ### Popup Notification
 ![Popup](docs/screenshot-popup.png)
@@ -101,6 +105,35 @@ Configure via System Settings → Keyboard → Shortcuts → Services, or use to
 - **Word of the Day**: Enable/disable daily word notifications with CEFR level selection (A1-C2)
 - **Autostart**: Automatically starts on system login
 - **Custom data directory**: Store database elsewhere
+- **Quiet hours**: Optional local start/end times (`HH:MM`); an overnight interval such as 22:00–08:00 is supported. Empty or equal endpoints disable quiet hours. Both ordinary exposures and Word of the Day respect them.
+
+### Everyday use
+
+- **Save** uses your entered translation, or translates an empty field. Choose
+  **Save without translation** to keep an untranslated entry explicitly.
+- Translation runs in the background, with duplicate submissions disabled. Each
+  provider runs in an isolated worker with a 15-second deadline; fallback can use
+  up to three workers sequentially (approximately 45 seconds in the worst case).
+- Existing translations are reused when adding the same phrase again. Double-click
+  a browser row and choose **Translate again** to preview a fresh translation before saving.
+- Original capitalization is preserved. Duplicate lookup and search are Unicode
+  case-insensitive. Existing lowercase entries are retained and can be edited.
+- In **Word Browser**, **Without translation** shows words missing a translation
+  in the selected language. Empty languages remain selectable. Clearing a translation
+  in the edit dialog removes that translation; the phrase stays in the library.
+- Column headers sort the entire result, including subsequent pages. The selected
+  phrase and translation are shown below the table with wrapping and selectable text.
+- **Undo deletion** restores the last translation deleted with the browser's delete
+  button while that window remains open. It never overwrites a newer translation.
+- **Hide for 7 days** temporarily excludes a word from the exposure queue across
+  languages; **Show again** removes that snooze. Neither action records an exposure.
+- **Pause / Resume…** chooses the next occurrence of a local time (within 24 hours).
+  The pause survives restarts. Resume clears this pause; quiet hours still apply.
+- Enter submits the add/edit dialog; Escape closes windows when no save is in progress;
+  Ctrl+F focuses browser search. Statistics and today's list refresh on reopening
+  and after GUI library changes. Their day boundary follows the local timezone.
+- Launching the GUI again opens the existing instance's browser through the desktop
+  session bus. Exit an older running version before starting this version.
 
 ### Database Location
 
@@ -122,12 +155,16 @@ translation in the selected target language are eligible.
 
 The configured notification cadence stays unchanged, including after a long
 absence. If nothing is eligible, no word notification is sent. Manual **Next**
-also respects the queue and can produce no notification while words are cooling
-down. Word of the Day uses its own schedule.
+also respects the queue and reports the earliest eligibility time when words are
+cooling down. This is eligibility, not a promise of an automatic notification at
+that instant: cadence and quiet hours still apply. Manual Next remains available
+during pauses and quiet hours. Word of the Day uses its own UTC-day schedule.
 
-The queue uses existing history and survives restarts without a database migration.
+The queue uses existing history and survives restarts. Startup adds a snooze table
+and a covering history index to existing databases; no vocabulary is rewritten.
 Exposure history remains shared across translation languages. As before, history
 is recorded when a notification is prepared; it cannot confirm that you read it.
+History and the last-exposure timestamp are now committed together.
 
 ## Troubleshooting
 
@@ -257,3 +294,26 @@ src/tests/
 
 Tests run automatically on GitHub Actions (see `.github/workflows/test.yml`).
 
+GTK integration tests are opt-in and use a temporary database. On a separate GTK3
+Broadway display:
+
+```bash
+broadwayd --address=127.0.0.1 :17
+# In another terminal:
+GDK_BACKEND=broadway BROADWAY_DISPLAY=:17 RUN_GTK_TESTS=1 venv/bin/python -m pytest -q src/tests/integration/test_gui.py
+```
+
+Set `UPDATE_SCREENSHOTS=1` on that test command to regenerate the four window
+snapshots from demo data. The test display does not connect to your running app.
+
+An opt-in queue benchmark creates 10,000 words and 200,000 exposures in a temporary database:
+
+```bash
+RUN_QUEUE_BENCHMARK=1 venv/bin/python -m pytest -q -s src/tests/integration/test_queue_performance.py
+```
+
+On the development host, median selection time fell from 1051 ms before the query/index
+optimization to 163 ms after it (10 warm measurements). This synthetic benchmark
+measures selection only, not translation or notification delivery. The optimization
+uses indexed lookups for recent introductions and unseen words, avoiding repeated
+full-history aggregation without adding denormalized counters.

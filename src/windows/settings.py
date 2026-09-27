@@ -1,11 +1,12 @@
 """Settings window."""
 
 import os
+from datetime import datetime
 
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, Gtk
+from gi.repository import Gtk
 
 from application.service_interfaces import CEFR_LEVELS
 from config import (
@@ -15,6 +16,8 @@ from config import (
     DEFAULT_TARGET_LANG,
     DEFAULT_TRANSLATION_PROVIDER,
     DEFAULT_WOTD_LEVEL,
+    QUIET_END_KEY,
+    QUIET_START_KEY,
     REVIEW_INTERVAL_KEY,
     SOURCE_LANG_KEY,
     TARGET_LANG_KEY,
@@ -28,14 +31,14 @@ from infrastructure.config_file import read_config, write_config
 from infrastructure.data_relocation import DataDirChoice, RelocationVerdict, relocate_database
 from infrastructure.translation import ProviderRegistry
 from version import get_version
-from windows import BaseWindow, padded_box, show_message
+from windows import BaseWindow, padded_box
 
 
 class SettingsWindow(BaseWindow):
     """Settings window."""
 
     def __init__(self, vocab_service, config_file=None):
-        super().__init__(title="Settings", width=600, height=1100)
+        super().__init__(title="Settings", width=650, height=720)
         self.vocab_service = vocab_service
         self.config_file = config_file
 
@@ -46,7 +49,9 @@ class SettingsWindow(BaseWindow):
     def build_ui(self) -> None:
         """Build the UI."""
         scroll = Gtk.ScrolledWindow()
-        self.add(scroll)
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.add(main_box)
+        main_box.pack_start(scroll, True, True, 0)
 
         box = padded_box()
         scroll.add(box)
@@ -67,9 +72,15 @@ class SettingsWindow(BaseWindow):
 
         save_btn = Gtk.Button(label="Save Settings")
         save_btn.connect("clicked", self.on_save_settings)
+        save_btn.get_style_context().add_class("suggested-action")
         btn_box.pack_start(save_btn, True, True, 0)
 
-        box.pack_start(btn_box, False, False, 10)
+        footer = padded_box(spacing=8, margin=12)
+        self.status_label = Gtk.Label(xalign=0)
+        self.status_label.set_line_wrap(True)
+        footer.pack_start(self.status_label, False, False, 0)
+        footer.pack_start(btn_box, False, False, 0)
+        main_box.pack_end(footer, False, False, 0)
 
         # Version footer
         footer_label = Gtk.Label(f"App version: {get_version()}")
@@ -103,7 +114,24 @@ class SettingsWindow(BaseWindow):
         )
         self.interval_combo.set_active_id(current_interval)
         interval_box.pack_end(self.interval_combo, False, False, 0)
-        return self._make_frame("Review", interval_box)
+        section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        section.pack_start(interval_box, False, False, 0)
+        quiet = Gtk.Box(spacing=10)
+        quiet.pack_start(Gtk.Label(label="Quiet hours (local HH:MM):"), False, False, 0)
+        self.quiet_start = Gtk.Entry()
+        self.quiet_end = Gtk.Entry()
+        for entry, key, hint in (
+            (self.quiet_start, QUIET_START_KEY, "22:00"),
+            (self.quiet_end, QUIET_END_KEY, "08:00"),
+        ):
+            entry.set_width_chars(6)
+            entry.set_placeholder_text(hint)
+            entry.set_text(self.vocab_service.get_setting(key, "") or "")
+            quiet.pack_start(entry, False, False, 0)
+        section.pack_start(quiet, False, False, 0)
+        hint = Gtk.Label(label="Leave both empty to disable. Applies to Word of the Day too.")
+        section.pack_start(hint, False, False, 0)
+        return self._make_frame("Notifications", section)
 
     def _build_translation_section(self) -> Gtk.Frame:
         """Build the translation provider/languages section."""
@@ -165,7 +193,7 @@ class SettingsWindow(BaseWindow):
         translation_box.pack_start(test_btn_box, False, False, 0)
         return self._make_frame("Translation", translation_box)
 
-    def _build_shortcuts_section(self) -> Gtk.Frame:
+    def _build_shortcuts_section(self) -> Gtk.Expander:
         """Build the keyboard shortcuts info section."""
         shortcuts_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
@@ -201,7 +229,9 @@ class SettingsWindow(BaseWindow):
         cmds_label.set_selectable(True)
         shortcuts_box.pack_start(cmds_label, False, False, 0)
 
-        return self._make_frame("Keyboard Shortcuts", shortcuts_box)
+        expander = Gtk.Expander(label="Keyboard shortcuts")
+        expander.add(shortcuts_box)
+        return expander
 
     def _build_startup_section(self) -> Gtk.Frame:
         """Build the autostart section."""
@@ -259,10 +289,11 @@ class SettingsWindow(BaseWindow):
         """Wrap content in a frame with a border."""
         frame = Gtk.Frame(label=title)
         frame.set_shadow_type(Gtk.ShadowType.IN)
-        align = Gtk.Alignment.new(0, 0, 1, 1)
-        align.set_padding(10, 10, 10, 10)
-        align.add(content)
-        frame.add(align)
+        content.set_margin_top(10)
+        content.set_margin_bottom(10)
+        content.set_margin_start(10)
+        content.set_margin_end(10)
+        frame.add(content)
         return frame
 
     def on_test_api(self, widget: Gtk.Widget) -> None:
@@ -280,23 +311,10 @@ class SettingsWindow(BaseWindow):
         self.test_spinner.start()
         self._test_completed = False
 
-        # Safety timeout: force failure after 30 seconds
-        def test_timeout():
-            if not self._test_completed:
-                GLib.idle_add(self._test_complete, False, provider_name)
-            return False
-
-        GLib.timeout_add_seconds(30, test_timeout)
-
-        def run_test():
-            success = self.vocab_service.test_translation_api(source_lang, target_lang, provider)
-            GLib.idle_add(self._test_complete, success, provider_name)
-
-        import threading
-
-        thread = threading.Thread(target=run_test)
-        thread.daemon = True
-        thread.start()
+        self.run_background(
+            lambda: self.vocab_service.test_translation_api(source_lang, target_lang, provider),
+            lambda result, error: self._test_complete(bool(result) and not error, provider_name),
+        )
 
     def _test_complete(self, success, provider_name):
         """Handle test completion."""
@@ -310,13 +328,6 @@ class SettingsWindow(BaseWindow):
         status = "Success!" if success else "Failed!"
         detail = "works." if success else "not working."
         self.test_status_label.set_text(f"{status} {provider_name} {detail}")
-
-        GLib.timeout_add(3000, self._clear_test_status)
-
-    def _clear_test_status(self):
-        """Clear the test status after a delay."""
-        self.test_status_label.set_text("")
-        return False
 
     def _ask_data_dir_choice(self) -> DataDirChoice:
         """Ask how to handle the existing vocabulary on data-dir change."""
@@ -341,7 +352,17 @@ class SettingsWindow(BaseWindow):
 
     def on_save_settings(self, widget: Gtk.Widget) -> None:
         """Save settings."""
+        start, end = self.quiet_start.get_text().strip(), self.quiet_end.get_text().strip()
+        if start or end:
+            try:
+                datetime.strptime(start, "%H:%M")
+                datetime.strptime(end, "%H:%M")
+            except ValueError:
+                self.status_label.set_text("Enter both quiet-hour times as HH:MM, or leave both empty.")
+                return
         settings = {
+            QUIET_START_KEY: start,
+            QUIET_END_KEY: end,
             REVIEW_INTERVAL_KEY: self.interval_combo.get_active_id(),
             TRANSLATION_PROVIDER_KEY: self.provider_combo.get_active_id(),
             SOURCE_LANG_KEY: self.src_lang_combo.get_active_id(),
@@ -368,15 +389,11 @@ class SettingsWindow(BaseWindow):
                 elif result.verdict is RelocationVerdict.START_EMPTY:
                     fresh_library = True
                 elif result.verdict is RelocationVerdict.FAILED:
-                    show_message(self, Gtk.MessageType.ERROR, result.error)
+                    self.status_label.set_text(result.error)
                     return
             config[DATA_DIR_KEY] = new_data_dir
             if not write_config(self.config_file, config):
-                show_message(
-                    self,
-                    Gtk.MessageType.ERROR,
-                    "Failed to write the config file. Settings were not saved.",
-                )
+                self.status_label.set_text("Failed to write the config file. Settings were not saved.")
                 return
 
         self.vocab_service.save_settings(settings)
@@ -409,4 +426,4 @@ class SettingsWindow(BaseWindow):
         else:
             msg_text = "Settings saved successfully!"
 
-        show_message(self, Gtk.MessageType.INFO, msg_text)
+        self.status_label.set_text(msg_text)

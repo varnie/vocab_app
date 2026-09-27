@@ -24,4 +24,9 @@ def today_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+def local_today_start_ts() -> int:
+    """Local calendar midnight, while stored timestamps remain UTC epochs."""
+    return int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
+
 __all__ = ["today_start_ts", "today_str", "utc_now_ts"]

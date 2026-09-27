@@ -34,6 +34,7 @@ select = [
 "src/infrastructure/tray/tray_linux.py" = ["module-import-not-at-top-of-file"]  # gi.require_version must precede GTK import
 "src/infrastructure/clipboard.py" = ["suspicious-subprocess-import"]  # subprocess used safely
 "src/infrastructure/notifications.py" = ["suspicious-subprocess-import"]  # subprocess used safely
+"src/infrastructure/translation.py" = ["suspicious-subprocess-import", "subprocess-without-shell-equals-true"]  # fixed executable; text via stdin
 "src/infrastructure/tray/__init__.py" = ["non-empty-init-module"]  # conditional imports needed
 "src/repositories/__init__.py" = ["non-empty-init-module"]  # factory registration needed
 "src/tests/**/*.py" = [

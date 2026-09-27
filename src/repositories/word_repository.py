@@ -2,7 +2,7 @@
 
 
 from sqlalchemy import case, func
-from sqlalchemy.orm import contains_eager, joinedload
+from sqlalchemy.orm import aliased, contains_eager, joinedload
 
 from config import DEFAULT_TARGET_LANG
 from domain.entities import Translation, Word
@@ -14,6 +14,7 @@ from infrastructure.models import History as ORMHistory
 from infrastructure.models import Language as ORMLanguage
 from infrastructure.models import Translation as ORMTranslation
 from infrastructure.models import Word as ORMWord
+from infrastructure.models import WordPause
 from infrastructure.models import WordStats as ORMWordStats
 from repositories.base import AbstractRepository
 
@@ -27,8 +28,7 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
 
     def add(self, phrase: str) -> Word:
         """Add a word, return its domain entity."""
-        phrase = phrase.lower()
-        orm_word = self.db.session.query(ORMWord).filter_by(phrase=phrase).first()
+        orm_word = self.db.session.query(ORMWord).filter(func.casefold(ORMWord.phrase) == phrase.casefold()).first()
         if orm_word:
             return mappers.map_word(orm_word)
         orm_word = ORMWord(phrase=phrase)
@@ -44,7 +44,8 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
                 joinedload(ORMWord.stats),
                 joinedload(ORMWord.translations).joinedload(ORMTranslation.language),
             )
-            .filter_by(phrase=phrase.lower())
+            .populate_existing()
+            .filter(func.casefold(ORMWord.phrase) == phrase.casefold())
             .first()
         )
         if not orm_word:
@@ -58,6 +59,9 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         limit: int | None = None,
         offset: int = 0,
         since: int | None = None,
+        sort: str = "phrase",
+        descending: bool = False,
+        untranslated: bool = False,
     ) -> list[Word]:
         """Get all words with stats."""
         lang = None
@@ -66,34 +70,45 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
             if not lang:
                 return []
 
-        query = self.db.session.query(ORMWord).options(joinedload(ORMWord.stats))
+        query = self.db.session.query(ORMWord).populate_existing().options(joinedload(ORMWord.stats))
 
         if lang:
-            query = query.join(
+            join = query.outerjoin if untranslated else query.join
+            query = join(
                 ORMTranslation,
                 (ORMTranslation.word_id == ORMWord.id) & (ORMTranslation.language_id == lang.id),
             ).options(
-                contains_eager(ORMWord.translations)
+                contains_eager(ORMWord.translations).joinedload(ORMTranslation.language)
             )
+            if untranslated:
+                query = query.filter(ORMTranslation.id.is_(None))
         else:
             query = query.options(
                 joinedload(ORMWord.translations).joinedload(ORMTranslation.language)
             )
 
         if search:
-            search_term = f"%{search}%"
+            search_term = "%" + search.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
             if lang:
                 query = query.filter(
-                    (ORMWord.phrase.ilike(search_term))
-                    | (ORMTranslation.translation.ilike(search_term))
+                    (func.casefold(ORMWord.phrase).like(search_term, escape="\\"))
+                    | (func.casefold(ORMTranslation.translation).like(search_term, escape="\\"))
                 )
             else:
-                query = query.filter(ORMWord.phrase.ilike(search_term))
+                query = query.filter(func.casefold(ORMWord.phrase).like(search_term, escape="\\"))
 
         if since is not None:
             query = query.filter(ORMWord.created_at >= since)
 
-        query = query.distinct().order_by(ORMWord.phrase)
+        sort_column = {
+            "phrase": func.casefold(ORMWord.phrase),
+            "translation": func.casefold(ORMTranslation.translation) if lang else func.casefold(ORMWord.phrase),
+            "last_reviewed": ORMWordStats.last_reviewed,
+            "created_at": ORMWord.created_at,
+        }.get(sort, func.casefold(ORMWord.phrase))
+        if sort == "last_reviewed":
+            query = query.outerjoin(ORMWordStats)
+        query = query.order_by(sort_column.desc() if descending else sort_column.asc(), ORMWord.id)
         if limit is not None:
             query = query.limit(limit).offset(offset)
         orm_words = query.all()
@@ -120,9 +135,13 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         )
         query = (
             self.db.session.query(ORMWord)
+            .populate_existing()
             .outerjoin(ORMWordStats)
             .outerjoin(review_counts, review_counts.c.word_id == ORMWord.id)
             .options(joinedload(ORMWord.stats))
+            .filter(~self.db.session.query(WordPause.word_id).filter(
+                WordPause.word_id == ORMWord.id, WordPause.until > now
+            ).exists())
         )
 
         if target_lang:
@@ -161,9 +180,11 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
             ((now - last_shown) / interval).desc(), func.random(),
         )
 
-        recent = self.db.session.query(
-            ORMHistory.id, review_counts.c.first_id,
-        ).join(review_counts, review_counts.c.word_id == ORMHistory.word_id)
+        first_history = aliased(ORMHistory)
+        first_id = self.db.session.query(func.min(first_history.id)).filter(
+            first_history.word_id == ORMHistory.word_id
+        ).correlate(ORMHistory).scalar_subquery()
+        recent = self.db.session.query(ORMHistory.id, first_id.label("first_id"))
         if target_lang:
             recent = recent.join(
                 ORMTranslation,
@@ -176,13 +197,27 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         new_words = []
         if allow_new or not due_words:
             # Stable FIFO prevents a bulk import from starving older unseen words.
-            new_words = query.filter(unseen).order_by(ORMWord.created_at, ORMWord.id).limit(1).all()
+            # A NOT EXISTS lookup avoids grouping the entire history a second time.
+            new_query = self.db.session.query(ORMWord).populate_existing().outerjoin(ORMWordStats).filter(
+                ORMWordStats.last_reviewed.is_(None),
+                ~self.db.session.query(ORMHistory.id).filter(ORMHistory.word_id == ORMWord.id).exists(),
+                ~self.db.session.query(WordPause.word_id).filter(
+                    WordPause.word_id == ORMWord.id, WordPause.until > now
+                ).exists(),
+            ).options(joinedload(ORMWord.stats))
+            if target_lang:
+                new_query = new_query.join(ORMTranslation).join(ORMTranslation.language).filter(
+                    ORMLanguage.code == target_lang
+                ).options(contains_eager(ORMWord.translations).contains_eager(ORMTranslation.language))
+            else:
+                new_query = new_query.options(joinedload(ORMWord.translations).joinedload(ORMTranslation.language))
+            new_words = new_query.order_by(ORMWord.created_at, ORMWord.id).limit(1).all()
         orm_words = (new_words + due_words)[:limit]
         return [mappers.map_word_with_details(w) for w in orm_words]
 
     def delete(self, phrase: str) -> None:
         """Delete a word."""
-        word = self.db.session.query(ORMWord).filter_by(phrase=phrase.lower()).first()
+        word = self.db.session.query(ORMWord).filter(func.casefold(ORMWord.phrase) == phrase.casefold()).first()
         if word:
             self.db.session.delete(word)
             self.commit()
@@ -225,12 +260,62 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
             return mappers.map_translation(orm)
         return None
 
-    def update_word(self, word_id: int, phrase: str) -> None:
-        """Update word phrase."""
+    def update_word(
+        self, word_id: int, phrase: str, translation: str | None = None, target_lang: str = DEFAULT_TARGET_LANG
+    ) -> None:
+        """Validate first, then atomically save phrase and selected translation."""
+        duplicate = self.db.session.query(ORMWord.id).filter(
+            func.casefold(ORMWord.phrase) == phrase.casefold(), ORMWord.id != word_id
+        ).first()
+        if duplicate:
+            raise ValueError("This phrase already exists. Edit the existing entry instead.")
+        lang = self._get_language(target_lang) if translation is not None else None
+        if translation is not None and lang is None:
+            raise ValueError("Unknown translation language")
         orm_word = self.db.session.query(ORMWord).filter_by(id=word_id).first()
         if orm_word:
             orm_word.phrase = phrase
+            if translation is not None:
+                existing = self.db.session.query(ORMTranslation).filter_by(
+                    word_id=word_id, language_id=lang.id
+                ).first()
+                if translation.strip():
+                    if existing:
+                        existing.translation = translation.strip()
+                    else:
+                        self.db.session.add(ORMTranslation(
+                            word_id=word_id, language_id=lang.id, translation=translation.strip()
+                        ))
+                elif existing:
+                    self.db.session.delete(existing)
             self.commit()
+
+    def snooze_word(self, word_id: int, until: int) -> None:
+        pause = self.db.session.get(WordPause, word_id)
+        if pause:
+            pause.until = until
+        else:
+            self.db.session.add(WordPause(word_id=word_id, until=until))
+        self.commit()
+
+    def next_available_at(self, target_lang: str) -> int | None:
+        """Earliest eligibility, including snoozed words; independent of cadence."""
+        counts = self.db.session.query(
+            ORMHistory.word_id, func.count(ORMHistory.id).label("count"),
+            func.max(ORMHistory.reviewed_at).label("last"),
+        ).group_by(ORMHistory.word_id).subquery()
+        count = func.coalesce(counts.c.count, 0)
+        interval = case(
+            *((count <= i, seconds) for i, seconds in enumerate(EXPOSURE_INTERVALS, 1)),
+            else_=EXPOSURE_INTERVALS[-1],
+        )
+        last = func.coalesce(counts.c.last, ORMWordStats.last_reviewed)
+        eligible = func.max(func.coalesce(last + interval, 0), func.coalesce(WordPause.until, 0))
+        return self.db.session.query(func.min(eligible)).select_from(ORMWord).join(
+            ORMTranslation, ORMTranslation.word_id == ORMWord.id
+        ).join(ORMLanguage, ORMLanguage.id == ORMTranslation.language_id).outerjoin(
+            counts, counts.c.word_id == ORMWord.id
+        ).outerjoin(ORMWordStats).outerjoin(WordPause).filter(ORMLanguage.code == target_lang).scalar()
 
     def delete_by_id(self, word_id: int) -> None:
         """Delete a word by ID."""

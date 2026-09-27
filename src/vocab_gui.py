@@ -4,6 +4,7 @@
 import logging
 import os
 import sys
+from datetime import datetime, timedelta
 
 import gi
 
@@ -41,7 +42,7 @@ class VocabApp(Gtk.Application):
     def __init__(self):
         super().__init__(
             application_id="com.vocab_app",
-            flags=Gio.ApplicationFlags.NON_UNIQUE,
+            flags=Gio.ApplicationFlags.FLAGS_NONE,
         )
         self.connect("activate", self._on_activate)
 
@@ -113,7 +114,10 @@ class VocabApp(Gtk.Application):
         Gtk.Application.do_activate(self)
 
     def _on_activate(self, app):
-        pass
+        # The first activation stays unobtrusive; subsequent launches open the library.
+        if getattr(self, "_activated", False):
+            self.on_word_browser()
+        self._activated = True
 
     def _menu_callbacks(self):
         return {
@@ -129,12 +133,24 @@ class VocabApp(Gtk.Application):
 
     def _open_window(self, key, create_fn):
         if self._windows.get(key):
+            win = self._windows[key]
+            if hasattr(win, "refresh"):
+                win.refresh()
+            elif hasattr(win, "load_words"):
+                win.load_words()
             self._windows[key].present()
         else:
             win = create_fn()
+            win.on_data_changed = self._refresh_summaries
             win.set_application(self)
             win.show_all()
             self._windows[key] = win
+
+    def _refresh_summaries(self):
+        for key in ("stats", "words_today"):
+            window = self._windows.get(key)
+            if window:
+                window.refresh()
 
     def _open_simple(self, key, window_cls, *args) -> None:
         """Open a window that only needs vocab_service (plus extra args)."""
@@ -159,6 +175,13 @@ class VocabApp(Gtk.Application):
         word = self.scheduler.on_show_next()
         if word:
             self.tray.set_label(str(word.phrase)[:20])
+        else:
+            timestamp = self.vocab_service.next_available_at()
+            if timestamp is None:
+                self.notify("No words available. Add a word with a translation in the selected language.")
+            else:
+                when = datetime.fromtimestamp(timestamp).strftime("%d %b, %H:%M")
+                self.notify(f"No words due yet. Next eligible word: {when}.")
 
     def on_show_stats(self, widget=None) -> None:
         """Show stats window."""
@@ -169,6 +192,13 @@ class VocabApp(Gtk.Application):
 
         def on_add(word):
             self.tray.set_label(word[:20])
+            for key in ("browser", "stats", "words_today"):
+                win = self._windows.get(key)
+                if win:
+                    if hasattr(win, "refresh"):
+                        win.refresh()
+                    elif hasattr(win, "load_words"):
+                        win.load_words()
 
         def create_window():
             win = AddWordDialog(self.vocab_service, on_add)
@@ -179,8 +209,36 @@ class VocabApp(Gtk.Application):
 
     def on_pause(self, widget=None) -> None:
         """Toggle pause/resume reviews."""
-        label = self.scheduler.on_pause()
-        self.tray.set_pause_label(label)
+        dialog = Gtk.Dialog(title="Pause notifications", flags=Gtk.DialogFlags.MODAL)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Resume", Gtk.ResponseType.NO)
+        dialog.add_button("Pause", Gtk.ResponseType.OK)
+        entry = Gtk.Entry()
+        entry.set_text((datetime.now() + timedelta(hours=1)).strftime("%H:%M"))
+        box = dialog.get_content_area()
+        box.pack_start(Gtk.Label(label="Pause until (local time, HH:MM; next occurrence):"), False, False, 10)
+        box.pack_start(entry, False, False, 10)
+        error = Gtk.Label()
+        box.pack_start(error, False, False, 0)
+        dialog.show_all()
+        while True:
+            response = dialog.run()
+            if response == Gtk.ResponseType.NO:
+                self.scheduler.pause_until(0)
+            elif response == Gtk.ResponseType.OK:
+                try:
+                    until = datetime.strptime(entry.get_text().strip(), "%H:%M").time()
+                except ValueError:
+                    error.set_text("Use HH:MM, for example 18:30.")
+                    continue
+                now = datetime.now()
+                timestamp = datetime.combine(now.date(), until)
+                if timestamp <= now:
+                    timestamp += timedelta(days=1)
+                self.scheduler.pause_until(timestamp.timestamp())
+            break
+        self.tray.set_pause_label("Pause / Resume…")
+        dialog.destroy()
 
     def on_settings(self, widget=None) -> None:
         """Show settings window."""

@@ -1,16 +1,31 @@
 """Translation providers."""
 
+import json
 import logging
+import subprocess
+import sys
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import ClassVar
-
-import requests
 
 from application.service_interfaces import AbstractTranslationService
 from config import DEFAULT_SOURCE_LANG, DEFAULT_TARGET_LANG, DEFAULT_TRANSLATION_PROVIDER
 from domain.exceptions import TranslationError
 
 logger = logging.getLogger(__name__)
+TRANSLATION_TIMEOUT_SECONDS = 15
+
+
+def _bounded_translation(provider: str, text: str, source: str, target: str) -> str:
+    """Kill and reap an unresponsive library call; never leave orphan workers."""
+    result = subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("translation_worker.py"))],
+        input=json.dumps([provider, text, source, target]),
+        capture_output=True, text=True, timeout=TRANSLATION_TIMEOUT_SECONDS, check=False,
+    )
+    if result.returncode:
+        raise TranslationError(f"{provider} could not translate this phrase")
+    return json.loads(result.stdout)
 
 
 class TranslationProvider(ABC):
@@ -50,31 +65,9 @@ class TranslationProvider(ABC):
 class GoogleDirectProvider(TranslationProvider):
     """Google Translate provider using direct HTTP requests."""
 
-    def __init__(self):
-        self.base_url = "https://translate.googleapis.com/translate_a/single"
-
     def _do_translate(self, text: str, target_lang: str, source_lang: str):
         """Translate text using Google Translate."""
-        response = requests.get(
-            self.base_url,
-            params={
-                "client": "gtx",
-                "sl": source_lang,
-                "tl": target_lang,
-                "dt": "t",
-                "q": text,
-            },
-            timeout=12,
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        if data and data[0]:
-            for item in data[0]:
-                if item[0]:
-                    return item[0]
-
-        return ""
+        return _bounded_translation("google_direct", text, source_lang, target_lang)
 
     def get_name(self) -> str:
         return "Google Translate (direct)"
@@ -83,16 +76,9 @@ class GoogleDirectProvider(TranslationProvider):
 class GoogleDeepTranslatorProvider(TranslationProvider):
     """Google Translate provider using deep-translator library."""
 
-    def __init__(self):
-        from deep_translator import GoogleTranslator
-
-        self.translator = GoogleTranslator(source="en", target="ru")
-
     def _do_translate(self, text: str, target_lang: str, source_lang: str):
         """Translate text using Google Translate via deep-translator."""
-        self.translator.source = source_lang
-        self.translator.target = target_lang
-        return self.translator.translate(text)
+        return _bounded_translation("google_deep", text, source_lang, target_lang)
 
     def get_name(self) -> str:
         return "Google Translate (deep-translator)"
@@ -112,19 +98,12 @@ class MyMemoryProvider(TranslationProvider):
         "uk": "uk-UA",
     }
 
-    def __init__(self):
-        from deep_translator import MyMemoryTranslator
-
-        self.translator = MyMemoryTranslator(source="en-US", target="ru-RU")
-
     def _do_translate(self, text: str, target_lang: str, source_lang: str):
         """Translate text using MyMemory API."""
         src_lang = self.LANG_MAP.get(source_lang, f"{source_lang}-{source_lang.upper()}")
         tgt_lang = self.LANG_MAP.get(target_lang, f"{target_lang}-{target_lang.upper()}")
 
-        self.translator.source = src_lang
-        self.translator.target = tgt_lang
-        return self.translator.translate(text)
+        return _bounded_translation("mymemory", text, src_lang, tgt_lang)
 
     def get_name(self) -> str:
         return "MyMemory (free)"

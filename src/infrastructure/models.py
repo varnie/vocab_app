@@ -53,6 +53,12 @@ class Translation(Base):
     )
 
 
+class WordPause(Base):
+    __tablename__ = "word_pauses"
+    word_id = Column(Integer, ForeignKey("words.id", ondelete="CASCADE"), primary_key=True)
+    until = Column(Integer, nullable=False)
+
+
 class WordStats(Base):
     __tablename__ = "word_stats"
 
@@ -74,6 +80,7 @@ class History(Base):
     __table_args__ = (
         Index("idx_history_reviewed_at", "reviewed_at"),
         Index("idx_history_word_id", "word_id"),
+        Index("idx_history_word_time", "word_id", "reviewed_at"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)

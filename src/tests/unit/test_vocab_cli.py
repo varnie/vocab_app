@@ -70,8 +70,8 @@ class TestRunCli:
                 result = run_cli()
                 assert result is True
                 mock_service.add_word.assert_called_once()
-                # Should notify "Word saved: hello" (lowercase)
-                mock_notify.assert_called_once_with("Word saved: hello")
+                # Preserve the user's spelling.
+                mock_notify.assert_called_once_with("Word saved: Hello")
 
     @patch("vocab_cli.create_vocab_service")
     @patch("vocab_cli.send_notification")
@@ -154,7 +154,9 @@ class TestRunCli:
         with patch("sys.argv", ["vocab_cli", "--next"]):
             result = run_cli()
             assert result is True
-            mock_notify.assert_not_called()
+            mock_notify.assert_called_once_with(
+                "No words available. Add a word with a translation in the selected language."
+            )
 
     @patch("vocab_cli.create_vocab_service", return_value=None)
     def test_run_cli_service_creation_fails(self, mock_create):

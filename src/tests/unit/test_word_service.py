@@ -1,9 +1,9 @@
 """Unit tests for WordManagementService."""
 
-from datetime import datetime, timezone
-
 import pytest
 from sqlalchemy import text
+
+from domain.time_utils import local_today_start_ts
 
 
 class TestWordManagementService:
@@ -106,8 +106,7 @@ class TestWordManagementService:
         word_service.add_word("today_word", translation="сегодня")
         word_service.add_word("yesterday_word", translation="вчера")
 
-        now = datetime.now(timezone.utc)
-        today_start = int(datetime(now.year, now.month, now.day, tzinfo=timezone.utc).timestamp())
+        today_start = local_today_start_ts()
         yesterday_start = today_start - 86400
 
         test_db.session.execute(

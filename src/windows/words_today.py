@@ -122,6 +122,9 @@ class WordsTodayWindow(BaseWindow):
         self.count_label.set_text("No words added today" if not count else f"Added today: {count}")
         self._refresh_wotd_banner()
 
+    def refresh(self):
+        self._populate()
+
     def _refresh_wotd_banner(self) -> None:
         """Show today's Word of the Day above the list, if already shown."""
         today = self.vocab_service.get_today_display()

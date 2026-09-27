@@ -1,6 +1,7 @@
 """Abstract service interfaces - application layer defines contracts."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Protocol
 
 from config import (
@@ -8,6 +9,8 @@ from config import (
     DEFAULT_SOURCE_LANG,
     DEFAULT_TARGET_LANG,
     DEFAULT_TRANSLATION_PROVIDER,
+    QUIET_END_KEY,
+    QUIET_START_KEY,
     REVIEW_INTERVAL_KEY,
     SOURCE_LANG_KEY,
     TARGET_LANG_KEY,
@@ -68,6 +71,8 @@ class AbstractWordManagementService(ABC):
         phrase: str,
         translation: str | None = None,
         auto_translate: bool = False,
+        force_translate: bool = False,
+        *, target_lang: str | None = None, source_lang: str | None = None,
     ) -> Word:
         """Add a new word or add translation to existing word."""
         pass
@@ -79,6 +84,9 @@ class AbstractWordManagementService(ABC):
         target_lang: str | None = None,
         limit: int | None = None,
         offset: int = 0,
+        sort: str = "phrase",
+        descending: bool = False,
+        untranslated: bool = False,
     ) -> list[Word]:
         """Get all words with optional search and language filter."""
         pass
@@ -104,7 +112,9 @@ class AbstractWordManagementService(ABC):
         pass
 
     @abstractmethod
-    def update_word(self, word_id: int, phrase: str, translation: str | None = None) -> None:
+    def update_word(
+        self, word_id: int, phrase: str, translation: str | None = None, target_lang: str | None = None
+    ) -> None:
         """Update word phrase and optionally translation."""
         pass
 
@@ -225,6 +235,16 @@ class AbstractSettingsService(ABC):
             return int(self.get_setting(REVIEW_INTERVAL_KEY, DEFAULT_REVIEW_INTERVAL) or DEFAULT_REVIEW_INTERVAL)
         except (TypeError, ValueError):
             return int(DEFAULT_REVIEW_INTERVAL)
+
+    def is_quiet_time(self) -> bool:
+        """Local recurring quiet hours; equal or empty endpoints disable them."""
+        try:
+            start = datetime.strptime(self.get_setting(QUIET_START_KEY, "") or "", "%H:%M").time()
+            end = datetime.strptime(self.get_setting(QUIET_END_KEY, "") or "", "%H:%M").time()
+        except ValueError:
+            return False
+        now = datetime.now().time()
+        return start <= now < end if start < end else (start != end and (now >= start or now < end))
 
 
 class AbstractWOTDService(ABC):

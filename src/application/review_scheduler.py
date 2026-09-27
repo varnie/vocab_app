@@ -12,6 +12,7 @@ from application.service_interfaces import (
     AbstractSettingsService,
     AbstractWOTDService,
 )
+from config import PAUSED_UNTIL_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,11 @@ class ReviewScheduler:
 
         self.current_word = None
         self.paused_until = 0.0
+        try:
+            stored_pause = self.settings_service.get_setting(PAUSED_UNTIL_KEY, "0")
+            self.paused_until = float(stored_pause) if isinstance(stored_pause, str) else 0.0
+        except ValueError:
+            pass
         self.running = False
         self._state_lock = threading.Lock()
         self._settings_changed = threading.Event()
@@ -82,8 +88,21 @@ class ReviewScheduler:
             else:
                 self.paused_until = now + 3600
                 label = "Resume"
+            paused_until = self.paused_until
+        self.settings_service.set_setting(PAUSED_UNTIL_KEY, str(paused_until))
         self._settings_changed.set()
         return label
+
+    def pause_until(self, timestamp: float) -> None:
+        with self._state_lock:
+            self.paused_until = timestamp
+        self.settings_service.set_setting(PAUSED_UNTIL_KEY, str(timestamp))
+        self._settings_changed.set()
+
+    def notifications_paused(self) -> bool:
+        with self._state_lock:
+            paused = self.paused_until > time.time()
+        return paused or self.settings_service.is_quiet_time() is True
 
     def on_show_next(self):
         """Show next word immediately. Returns the Word or None."""
@@ -113,6 +132,8 @@ class ReviewScheduler:
     def _check_wotd(self) -> None:
         """Check and show Word of the Day if enabled."""
         try:
+            if self.notifications_paused():
+                return
             word = self.wotd_service.get_word_of_the_day()
             if word:
                 self._write_phrase(word.phrase)
@@ -156,8 +177,8 @@ class ReviewScheduler:
                 interval = self.settings_service.get_review_interval()
 
                 now = time.time()
-                if now < current_paused:
-                    wait_time = current_paused - now
+                if self.notifications_paused():
+                    wait_time = max(current_paused - now, 60)
                     self._settings_changed.wait(min(wait_time, 60))
                     self._settings_changed.clear()
                     continue

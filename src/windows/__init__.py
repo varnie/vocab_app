@@ -3,7 +3,9 @@
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+import threading
+
+from gi.repository import Gdk, GLib, Gtk
 
 
 class BaseWindow(Gtk.Window):
@@ -13,14 +15,52 @@ class BaseWindow(Gtk.Window):
         super().__init__(title=title)
         self.set_default_size(width, height)
         self.set_position(Gtk.WindowPosition.CENTER)
+        self.closed = False
+        self.on_data_changed = lambda: None
+        self.connect("destroy", self._mark_closed)
+        self.connect("key-press-event", self._on_key)
+
+    def _mark_closed(self, *_args):
+        self.closed = True
+
+    def _on_key(self, _widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        if (
+            event.keyval == Gdk.KEY_f and event.state & Gdk.ModifierType.CONTROL_MASK
+            and hasattr(self, "search_entry")
+        ):
+            self.search_entry.grab_focus()
+            return True
+        return False
+
+    def run_background(self, work, complete):
+        """Return results to GTK only while the window is still alive."""
+        def deliver(result, error):
+            if not self.closed:
+                complete(result, error)
+            return False
+
+        def worker():
+            result, error = None, None
+            try:
+                result = work()
+            except Exception as exc:
+                error = str(exc)
+            finally:
+                self.vocab_service.remove_session()
+            GLib.idle_add(deliver, result, error)
+
+        threading.Thread(target=worker, daemon=True).start()
 
 
 def set_margins(widget: Gtk.Widget, margin: int) -> None:
     """Apply uniform margins to an existing widget."""
     widget.set_margin_top(margin)
     widget.set_margin_bottom(margin)
-    widget.set_margin_left(margin)
-    widget.set_margin_right(margin)
+    widget.set_margin_start(margin)
+    widget.set_margin_end(margin)
 
 
 def padded_box(
