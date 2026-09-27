@@ -116,12 +116,10 @@ class SettingsWindow(BaseWindow):
         for provider, name in ProviderRegistry.list_providers():
             self.provider_combo.append(provider, name)
 
-        # Handle legacy "google" setting and default
+        # Preserve supported providers; fall back only for unknown/legacy IDs.
         current_provider = self.vocab_service.get_settings().get(
             TRANSLATION_PROVIDER_KEY, DEFAULT_TRANSLATION_PROVIDER
         )
-        if current_provider in ("google", "google_direct"):
-            current_provider = DEFAULT_TRANSLATION_PROVIDER  # Legacy fallback (Google direct is blocked)
         if current_provider not in [p[0] for p in ProviderRegistry.list_providers()]:
             current_provider = DEFAULT_TRANSLATION_PROVIDER  # Default if not found
 
