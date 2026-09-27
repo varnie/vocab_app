@@ -185,6 +185,7 @@ class WordBrowserWindow(BaseWindow):
         self.model.clear()
         self.selected_word_id = None
         self.delete_btn.set_sensitive(False)
+        self.delete_btn.set_label("Delete translation")
         self.snooze_btn.set_sensitive(False)
         self.detail_label.set_text("")
 
@@ -277,10 +278,11 @@ class WordBrowserWindow(BaseWindow):
             idx = model.get_value(it, 0) - 1
             if 0 <= idx < len(self.words):
                 self.selected_word_id = self.words[idx].id
-                self.delete_btn.set_sensitive(True)
                 self.snooze_btn.set_sensitive(True)
                 word = self.words[idx]
-                self.delete_btn.set_sensitive(bool(word.translation))
+                # Rows without a translation can't lose one — offer whole-word delete.
+                self.delete_btn.set_label("Delete translation" if word.translation else "Delete word")
+                self.delete_btn.set_sensitive(True)
                 self.detail_label.set_text(f"{word.phrase}\n{word.translation or 'No translation yet'}")
             else:
                 self.selected_word_id = None
@@ -319,22 +321,41 @@ class WordBrowserWindow(BaseWindow):
 
         # Get current language from dropdown
         current_lang = self.lang_combo.get_active_id() if self.lang_combo.get_model() else None
+        if not current_lang:
+            settings = self.vocab_service.get_settings()
+            current_lang = settings.get(TARGET_LANG_KEY, DEFAULT_TARGET_LANG)
 
-        # Confirm dialog
-        if ask_confirm(self, f"Delete translation for '{word.phrase}'?"):
-            # Only delete translation for current language, not the whole word
-            self.vocab_service.delete_translation(self.selected_word_id, current_lang)
-            self._undo = (word.id, word.translation, current_lang)
-            self.undo_btn.set_sensitive(True)
-            self.selected_word_id = None
-            self.load_words()
-            self.refresh_lang_dropdown()
-            self.on_data_changed()
+        if word.translation:
+            # Confirm dialog
+            if ask_confirm(self, f"Delete translation for '{word.phrase}'?"):
+                # Only delete translation for current language, not the whole word
+                self.vocab_service.delete_translation(self.selected_word_id, current_lang)
+                self._undo = ("translation", word.id, word.translation, current_lang)
+                self._after_delete()
+        elif ask_confirm(self, f"Delete word '{word.phrase}'?"):
+            self.vocab_service.delete_word_by_id(self.selected_word_id)
+            self._undo = ("word", word.phrase, word.translation, current_lang)
+            self._after_delete()
+
+    def _after_delete(self) -> None:
+        """Common refresh after a delete or undo."""
+        self.undo_btn.set_sensitive(True)
+        self.selected_word_id = None
+        self.load_words()
+        self.refresh_lang_dropdown()
+        self.on_data_changed()
 
     def on_undo(self, _widget):
         if self._undo:
             try:
-                self.vocab_service.restore_translation(*self._undo)
+                kind, *payload = self._undo
+                if kind == "word":
+                    phrase, translation, lang = payload
+                    restored = self.vocab_service.add_word(phrase)
+                    if translation:
+                        self.vocab_service.update_word(restored.id, phrase, translation, lang)
+                else:
+                    self.vocab_service.restore_translation(*payload)
             except ValueError as exc:
                 self.status_label.set_text(str(exc))
                 return

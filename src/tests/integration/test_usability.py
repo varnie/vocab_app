@@ -51,6 +51,44 @@ def test_language_is_captured_before_translation(word_service, word_repo, settin
     assert word_repo.get_translation(word.id, "fr") is None
 
 
+def test_untranslated_filter_respects_selected_language(word_service, word_repo):
+    """Switching language must change the untranslated list (browser popup)."""
+    word_service.add_word("apple", "яблоко")  # ru only
+    word_service.add_word("banana")  # no translation at all
+    cherry = word_service.add_word("cherry", "вишня")
+    word_repo.add_translation(cherry.id, "Kirsche", "de")
+
+    ru_missing = sorted(w.phrase for w in word_service.get_words(target_lang="ru", untranslated=True))
+    de_missing = sorted(w.phrase for w in word_service.get_words(target_lang="de", untranslated=True))
+
+    assert ru_missing == ["banana"]
+    assert de_missing == ["apple", "banana"]
+
+
+def test_delete_word_by_id_removes_word_and_translations(word_service, word_repo):
+    """Whole-word delete (browser popup for untranslated rows)."""
+    word = word_service.add_word("Gone", "Ушедший")
+
+    word_service.delete_word_by_id(word.id)
+
+    assert word_repo.get_by_phrase("gone") is None
+    assert word_repo.get_translation(word.id, "ru") is None
+
+
+def test_undo_word_delete_restores_word_with_translation(word_service, word_repo):
+    """Undo of a whole-word delete re-adds the word and its translation."""
+    word = word_service.add_word("Back", "Назад")
+    lang = "ru"
+    phrase, translation = word.phrase, word.translation
+    word_service.delete_word_by_id(word.id)
+    assert word_repo.get_by_phrase("back") is None
+
+    restored = word_service.add_word(phrase)
+    word_service.update_word(restored.id, phrase, translation, lang)
+
+    assert word_repo.get_translation(restored.id, lang).translation == "Назад"
+
+
 def test_clear_translation_and_undo(word_service, word_repo):
     word = word_service.add_word("Hello", "Original")
     word_service.update_word(word.id, "Hello", "", target_lang="ru")
