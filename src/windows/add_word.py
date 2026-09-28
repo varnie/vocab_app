@@ -86,7 +86,6 @@ class AddWordDialog(BaseWindow):
         box.pack_start(self.status_label, False, False, 0)
         self.word_entry.connect("activate", self.on_add_clicked)
         self.translation_entry.connect("activate", self.on_add_clicked)
-        self.connect("delete-event", lambda *_: self._busy)
         self.word_entry.grab_focus()
 
         box.pack_start(btn_box, False, False, 10)
@@ -123,6 +122,16 @@ class AddWordDialog(BaseWindow):
             if error:
                 self._show_error(error)
                 return
+            # Translation runs without writes. Closing the window discards its
+            # callback, so Cancel cannot leave a word saved in the background.
+            try:
+                result = self.vocab_service.add_word(
+                    result.phrase, result.translation or None,
+                    target_lang=self.target_lang, source_lang=self.source_lang,
+                )
+            except Exception as exc:
+                self._show_error(str(exc))
+                return
             write_current_phrase(result.phrase)
             if self.on_add:
                 self.on_add(result.phrase)
@@ -132,6 +141,7 @@ class AddWordDialog(BaseWindow):
             lambda: self.vocab_service.add_word(
                 word, translation, auto_translate=auto_translate,
                 target_lang=self.target_lang, source_lang=self.source_lang,
+                persist=False,
             ), complete
         )
 

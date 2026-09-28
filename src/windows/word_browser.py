@@ -6,7 +6,7 @@ gi.require_version("Gtk", "3.0")
 import time
 from datetime import datetime
 
-from gi.repository import GLib, Gtk
+from gi.repository import Gdk, GLib, Gtk, Pango
 
 from config import DEFAULT_TARGET_LANG, TARGET_LANG_KEY
 from domain.entities import Word
@@ -25,6 +25,11 @@ class WordBrowserWindow(BaseWindow):
 
     def __init__(self, vocab_service) -> None:
         super().__init__(title="Word Browser", width=910, height=600)
+        display = Gdk.Display.get_default()
+        monitor = display.get_primary_monitor() or display.get_monitor(0) if display else None
+        if monitor:
+            area = monitor.get_workarea()
+            self.set_default_size(min(910, area.width - 40), min(600, area.height - 60))
         self.vocab_service = vocab_service
         self.selected_word_id: int | None = None
         self.words: list[Word] = []
@@ -56,10 +61,16 @@ class WordBrowserWindow(BaseWindow):
         # Search entry
         self.search_entry = Gtk.Entry()
         self.search_entry.set_placeholder_text("Search words...")
-        self.search_entry.set_width_chars(25)
+        self.search_entry.set_width_chars(10)
         self.search_entry.connect("changed", self.on_search_changed)
         self.search_entry.connect("activate", self.on_search_activate)
-        toolbar.pack_start(self.search_entry, False, False, 0)
+        toolbar.pack_start(self.search_entry, True, True, 0)
+
+        refresh_btn = Gtk.Button(label="Refresh")
+        refresh_btn.connect("clicked", self.on_refresh)
+        toolbar.pack_start(refresh_btn, False, False, 0)
+        toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        main_box.pack_start(toolbar, False, False, 0)
 
         # Language filter
         toolbar.pack_start(Gtk.Label(label="Target Language:"), False, False, 5)
@@ -71,14 +82,15 @@ class WordBrowserWindow(BaseWindow):
         self._rebuild_lang_combo(current_lang)
         self.lang_combo.connect("changed", self.on_lang_changed)
         toolbar.pack_start(self.lang_combo, False, False, 0)
+        toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        main_box.pack_start(toolbar, False, False, 0)
         self.untranslated = Gtk.CheckButton(label="Without translation")
         self.untranslated.connect("toggled", self.on_lang_changed)
         toolbar.pack_start(self.untranslated, False, False, 0)
 
-        # Refresh button
-        refresh_btn = Gtk.Button(label="Refresh")
-        refresh_btn.connect("clicked", self.on_refresh)
-        toolbar.pack_start(refresh_btn, False, False, 0)
+        self.hidden_only = Gtk.CheckButton(label="Hidden only")
+        self.hidden_only.connect("toggled", self.on_lang_changed)
+        toolbar.pack_start(self.hidden_only, False, False, 0)
 
         # TreeView
         scrolled = Gtk.ScrolledWindow()
@@ -95,12 +107,14 @@ class WordBrowserWindow(BaseWindow):
             ("#", 50),
             ("Word", 300),
             ("Translation", 300),
-            ("Last reviewed", 120),
+            ("Last shown", 150),
         ]
 
         for i, (title, width) in enumerate(columns):
             renderer = Gtk.CellRendererText()
+            renderer.set_property("ellipsize", Pango.EllipsizeMode.END)
             column = Gtk.TreeViewColumn(title, renderer, text=i)
+            column.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
             column.set_fixed_width(width)
             column.set_resizable(True)
             if i:
@@ -110,9 +124,12 @@ class WordBrowserWindow(BaseWindow):
 
         self.treeview.connect("row-activated", self.on_row_activated)
         self.treeview.connect("cursor-changed", self.on_cursor_changed)
+        self.treeview.connect("size-allocate", self._fit_columns)
         scrolled.add(self.treeview)
         self.detail_label = Gtk.Label(xalign=0)
         self.detail_label.set_line_wrap(True)
+        self.detail_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.detail_label.set_width_chars(1)
         self.detail_label.set_selectable(True)
         self.detail_label.set_max_width_chars(90)
         main_box.pack_start(self.detail_label, False, False, 0)
@@ -130,13 +147,16 @@ class WordBrowserWindow(BaseWindow):
         self.undo_btn.set_sensitive(False)
         self.undo_btn.connect("clicked", self.on_undo)
         bottom_bar.pack_start(self.undo_btn, False, False, 0)
+        bottom_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        main_box.pack_start(bottom_bar, False, False, 0)
         self.snooze_btn = Gtk.Button(label="Hide for 7 days")
         self.snooze_btn.set_sensitive(False)
         self.snooze_btn.connect("clicked", self.on_snooze)
         bottom_bar.pack_start(self.snooze_btn, False, False, 0)
-        resume_btn = Gtk.Button(label="Show again")
-        resume_btn.connect("clicked", lambda _: self.on_snooze(None, resume=True))
-        bottom_bar.pack_start(resume_btn, False, False, 0)
+        self.resume_btn = Gtk.Button(label="Show again")
+        self.resume_btn.set_sensitive(False)
+        self.resume_btn.connect("clicked", lambda _: self.on_snooze(None, resume=True))
+        bottom_bar.pack_start(self.resume_btn, False, False, 0)
 
         # Pagination and status get their own row so actions fit smaller screens.
         bottom_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -152,8 +172,21 @@ class WordBrowserWindow(BaseWindow):
         # Status label
         self.status_label = Gtk.Label(label="")
         self.status_label.set_line_wrap(True)
+        self.status_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.status_label.set_width_chars(1)
         self.status_label.set_xalign(0)
         bottom_bar.pack_start(self.status_label, True, True, 0)
+
+    def _fit_columns(self, _tree, allocation):
+        """Keep both text columns visible; details show the full selected text."""
+        columns = self.treeview.get_columns()
+        narrow = allocation.width < 650
+        columns[3].set_visible(not narrow)
+        available = max(200, allocation.width - 50 - (0 if narrow else 155))
+        for index in (1, 2):
+            width = max(100, available // 2)
+            if columns[index].get_fixed_width() != width:
+                columns[index].set_fixed_width(width)
 
     def load_words(self) -> None:
         """Load words from database."""
@@ -171,6 +204,7 @@ class WordBrowserWindow(BaseWindow):
             limit=self.page_size + 1,
             offset=self.current_page * self.page_size,
             sort=self.sort, descending=self.descending, untranslated=self.untranslated.get_active(),
+            hidden_only=self.hidden_only.get_active(),
         )
         self._has_next = len(words) > self.page_size
         self.words = words[:self.page_size]
@@ -187,6 +221,7 @@ class WordBrowserWindow(BaseWindow):
         self.delete_btn.set_sensitive(False)
         self.delete_btn.set_label("Delete translation")
         self.snooze_btn.set_sensitive(False)
+        self.resume_btn.set_sensitive(False)
         self.detail_label.set_text("")
 
         for i, word in enumerate(self.words):
@@ -280,10 +315,17 @@ class WordBrowserWindow(BaseWindow):
                 self.selected_word_id = self.words[idx].id
                 self.snooze_btn.set_sensitive(True)
                 word = self.words[idx]
+                hidden = bool(word.hidden_until and word.hidden_until > time.time())
+                self.resume_btn.set_sensitive(hidden)
                 # Rows without a translation can't lose one — offer whole-word delete.
                 self.delete_btn.set_label("Delete translation" if word.translation else "Delete word")
                 self.delete_btn.set_sensitive(True)
-                self.detail_label.set_text(f"{word.phrase}\n{word.translation or 'No translation yet'}")
+                status = (
+                    f"\nHidden until {datetime.fromtimestamp(word.hidden_until):%Y-%m-%d %H:%M}" if hidden else ""
+                )
+                self.detail_label.set_text(
+                    f"{word.phrase}\n{word.translation or 'No translation in this language'}{status}"
+                )
             else:
                 self.selected_word_id = None
                 self.delete_btn.set_sensitive(False)
@@ -291,6 +333,7 @@ class WordBrowserWindow(BaseWindow):
             self.selected_word_id = None
             self.delete_btn.set_sensitive(False)
             self.snooze_btn.set_sensitive(False)
+            self.resume_btn.set_sensitive(False)
 
     def on_row_activated(
         self, treeview: Gtk.TreeView, path: Gtk.TreePath, column: Gtk.TreeViewColumn
@@ -332,9 +375,11 @@ class WordBrowserWindow(BaseWindow):
                 self.vocab_service.delete_translation(self.selected_word_id, current_lang)
                 self._undo = ("translation", word.id, word.translation, current_lang)
                 self._after_delete()
-        elif ask_confirm(self, f"Delete word '{word.phrase}'?"):
-            self.vocab_service.delete_word_by_id(self.selected_word_id)
-            self._undo = ("word", word.phrase, word.translation, current_lang)
+        elif ask_confirm(self, f"Delete word '{word.phrase}' in ALL languages?\n"
+                         "This removes every translation, review history and hidden-until date.\n"
+                         "Missing a translation in this view does not mean the word has no other translations."):
+            snapshot = self.vocab_service.delete_word_with_undo(self.selected_word_id)
+            self._undo = ("word", snapshot)
             self._after_delete()
 
     def _after_delete(self) -> None:
@@ -350,10 +395,7 @@ class WordBrowserWindow(BaseWindow):
             try:
                 kind, *payload = self._undo
                 if kind == "word":
-                    phrase, translation, lang = payload
-                    restored = self.vocab_service.add_word(phrase)
-                    if translation:
-                        self.vocab_service.update_word(restored.id, phrase, translation, lang)
+                    self.vocab_service.restore_word(*payload)
                 else:
                     self.vocab_service.restore_translation(*payload)
             except ValueError as exc:
@@ -367,6 +409,8 @@ class WordBrowserWindow(BaseWindow):
     def on_snooze(self, _widget, resume=False):
         if self.selected_word_id:
             self.vocab_service.snooze_word(self.selected_word_id, 0 if resume else int(time.time()) + 7 * 86400)
+            self.load_words()
+            self.on_data_changed()
             self.status_label.set_text("Word is available again." if resume else "Hidden from the queue for 7 days.")
 
     def _rebuild_lang_combo(self, preserve_id: str | None) -> None:
@@ -454,11 +498,17 @@ class WordBrowserWindow(BaseWindow):
             source = self.vocab_service.settings_service.get_source_lang()
             provider = self.vocab_service.settings_service.get_translation_provider()
             translate_btn.set_sensitive(False)
+            for entry in (word_entry, trans_entry):
+                entry.set_sensitive(False)
+            dialog.set_response_sensitive(Gtk.ResponseType.OK, False)
             error_label.set_text("Translating…")
 
             def complete(result, error):
                 if alive[0]:
                     translate_btn.set_sensitive(True)
+                    for entry in (word_entry, trans_entry):
+                        entry.set_sensitive(True)
+                    dialog.set_response_sensitive(Gtk.ResponseType.OK, True)
                     error_label.set_text(error or "")
                     if not error:
                         trans_entry.set_text(result)

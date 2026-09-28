@@ -139,6 +139,7 @@ class SQLiteDatabase(BaseDatabase):
     def close(self) -> None:
         """Close connection."""
         self.ScopedSession.remove()
+        self.engine.dispose()
         self._connected = False
 
     def remove_session(self) -> None:

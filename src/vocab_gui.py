@@ -61,6 +61,18 @@ class VocabApp(Gtk.Application):
         Gio.Application.hold(self)
 
         try:
+            from infrastructure.data_relocation import apply_pending_relocation
+            try:
+                apply_pending_relocation(self.config_file)
+            except Exception as error:
+                logger.exception("Could not apply pending directory change")
+                dialog = Gtk.MessageDialog(
+                    None, Gtk.DialogFlags.MODAL, Gtk.MessageType.WARNING, Gtk.ButtonsType.OK,
+                    "The data directory could not be changed. Your original library is still active.",
+                )
+                dialog.format_secondary_text(str(error))
+                dialog.run()
+                dialog.destroy()
             self.vocab_service = create_vocab_service(self.config_file)
         except Exception as e:
             logger.exception("Error creating vocab_service: %s", e)

@@ -63,6 +63,7 @@ class WordManagementService(AbstractWordManagementService):
         self, phrase: str, translation: str | None = None, auto_translate: bool = False,
         force_translate: bool = False,
         *, target_lang: str | None = None, source_lang: str | None = None,
+        persist: bool = True,
     ) -> Word:
         """Add a new word or add translation to existing word."""
         phrase = self._normalize_phrase(phrase)
@@ -97,10 +98,13 @@ class WordManagementService(AbstractWordManagementService):
                     )
 
             # We have a translation, so it is safe to persist the word.
-            word_id = self._get_or_create_id(phrase)
-            self.word_repo.add_translation(word_id, trans, target_lang)
+            if not persist:
+                return Word(phrase=phrase, translation=trans, language_code=target_lang)
+            self.word_repo.save_word(phrase, trans, target_lang)
         else:
             # No translation requested: just store the word as-is.
+            if not persist:
+                return Word(phrase=phrase, language_code=target_lang)
             self._get_or_create_id(phrase)
 
         result = self.word_repo.get_by_phrase(phrase)
@@ -121,10 +125,12 @@ class WordManagementService(AbstractWordManagementService):
         sort: str = "phrase",
         descending: bool = False,
         untranslated: bool = False,
+        hidden_only: bool = False,
     ) -> list[Word]:
         """Get all words with optional search and language filter."""
         return self.word_repo.get_all(
-            search, target_lang, limit, offset, sort=sort, descending=descending, untranslated=untranslated
+            search, target_lang, limit, offset, sort=sort, descending=descending,
+            untranslated=untranslated, hidden_only=hidden_only,
         )
 
     def get_words_added_today(self) -> list[Word]:
@@ -159,6 +165,12 @@ class WordManagementService(AbstractWordManagementService):
 
     def snooze_word(self, word_id: int, until: int) -> None:
         self.word_repo.snooze_word(word_id, until)
+
+    def delete_word_with_undo(self, word_id: int) -> dict:
+        return self.word_repo.delete_with_snapshot(word_id)
+
+    def restore_word(self, snapshot: dict) -> None:
+        self.word_repo.restore_snapshot(snapshot)
 
     def restore_translation(self, word_id: int, translation: str, target_lang: str) -> None:
         """Undo a browser deletion without recreating or renaming the word."""

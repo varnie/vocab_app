@@ -13,6 +13,7 @@ pytestmark = pytest.mark.skipif(os.environ.get("RUN_GTK_TESTS") != "1", reason="
 def gui(tmp_path):
     import gi
     gi.require_version("Gtk", "3.0")
+    gi.require_version("Gdk", "3.0")
     from gi.repository import Gtk
 
     from bootstrap import create_vocab_service
@@ -113,6 +114,88 @@ def test_settings_stats_and_today_refresh(gui):
     assert settings.get_default_size().height <= 720
 
 
+def test_cancel_translation_never_saves_late_result(gui, monkeypatch):
+    from windows.add_word import AddWordDialog
+
+    gtk, service = gui
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+
+    def translate(*_args):
+        entered.set()
+        assert release.wait(5)
+        return "late translation"
+
+    original_remove = service.remove_session
+
+    def remove_session():
+        original_remove()
+        finished.set()
+
+    monkeypatch.setattr(service.word_service.translation_service, "translate", translate)
+    monkeypatch.setattr(service, "remove_session", remove_session)
+    window = AddWordDialog(service)
+    window.show_all()
+    window.word_entry.set_text("Cancelled")
+    window.on_add_clicked(None)
+    assert entered.wait(2)
+    window.close()
+    drain(gtk)
+    assert window.closed
+    release.set()
+    assert finished.wait(2)
+    drain(gtk)
+    assert service.word_service.word_repo.get_by_phrase("Cancelled") is None
+
+
+@pytest.mark.parametrize("width", [440, 860, 1000])
+def test_browser_narrow_layout_and_hidden_status(gui, width):
+    from windows.word_browser import WordBrowserWindow
+
+    gtk, service = gui
+    word = service.add_word("A long phrase " * 10, "Long translation " * 10)
+    service.snooze_word(word.id, int(time.time()) + 86400)
+    browser = WordBrowserWindow(service)
+    browser.show_all()
+    browser.resize(width, 650)
+    for _ in range(10):
+        drain(gtk)
+        time.sleep(0.02)
+    assert browser.get_size().width <= width
+    browser.hidden_only.set_active(True)
+    browser.treeview.set_cursor(gtk.TreePath.new_from_string("0"))
+    drain(gtk)
+    assert "Hidden until" in browser.detail_label.get_text()
+    assert browser.resume_btn.get_sensitive()
+    browser.on_snooze(None, resume=True)
+    assert len(browser.model) == 0
+    assert not browser.resume_btn.get_sensitive()
+
+
+def test_browser_deletes_and_restores_other_languages(gui, monkeypatch):
+    from windows.word_browser import WordBrowserWindow
+
+    gtk, service = gui
+    word = service.add_word("Hello", "bonjour", target_lang="fr")
+    service.review_word(word.id)
+    browser = WordBrowserWindow(service)
+    browser.show_all()
+    browser.untranslated.set_active(True)
+    browser.treeview.set_cursor(gtk.TreePath.new_from_string("0"))
+    drain(gtk)
+    messages = []
+
+    def confirm(_parent, message):
+        messages.append(message)
+        return True
+
+    monkeypatch.setattr("windows.word_browser.ask_confirm", confirm)
+    browser.on_delete(None)
+    browser.on_undo(None)
+    assert "ALL languages" in messages[0]
+    assert service.word_service.word_repo.get_translation(word.id, "fr").translation == "bonjour"
+    assert service.get_stats()["total_reviews"] == 1
+
+
 def test_edit_dialog_saves_selected_language(gui):
     from gi.repository import GLib
 
@@ -159,7 +242,7 @@ def test_settings_validate_quiet_hours_without_saving_invalid_input(gui, monkeyp
 def test_documentation_screenshots(gui):
     from pathlib import Path
 
-    import cairo
+    from gi.repository import Gdk
 
     from windows.add_word import AddWordDialog
     from windows.settings import SettingsWindow
@@ -183,25 +266,12 @@ def test_documentation_screenshots(gui):
     ):
         if isinstance(window, WordBrowserWindow):
             window.treeview.set_cursor(gtk.TreePath.new_from_string("0"))
-        offscreen = gtk.OffscreenWindow()
-        width, height = window.get_default_size()
-        offscreen.set_size_request(width, height)
-        offscreen.get_style_context().add_class("background")
-        child = window.get_child()
-        window.remove(child)
-        offscreen.add(child)
-        offscreen.show_all()
+        window.show_all()
         for _ in range(10):
             drain(gtk)
             time.sleep(0.02)
-        # Offscreen windows have transparent margins; paint the window background
-        # before asking GTK to draw its actual widgets into the snapshot.
-        allocation = offscreen.get_allocation()
-        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, allocation.width, allocation.height)
-        context = cairo.Context(surface)
-        context.set_source_rgb(0.965, 0.961, 0.957)
-        context.paint()
-        offscreen.draw(context)
-        surface.write_to_png(str(docs / f"screenshot-{name}.png"))
-        offscreen.destroy()
+        width, height = window.get_size()
+        snapshot = Gdk.pixbuf_get_from_window(window.get_window(), 0, 0, width, height)
+        assert snapshot is not None
+        snapshot.savev(str(docs / f"screenshot-{name}.png"), "png", [], [])
         window.destroy()

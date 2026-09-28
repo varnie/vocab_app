@@ -26,6 +26,93 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         """Get language ORM row by code, or None if unknown."""
         return self.db.session.query(ORMLanguage).filter_by(code=code).first()
 
+    def save_word(self, phrase: str, translation: str | None, target_lang: str) -> Word:
+        """Create a phrase and its translation in one transaction."""
+        session = self.db.session
+        try:
+            lang = self._get_language(target_lang) if translation is not None else None
+            if translation is not None and lang is None:
+                raise ValueError("Unknown translation language")
+            word = session.query(ORMWord).filter(func.casefold(ORMWord.phrase) == phrase.casefold()).first()
+            if word is None:
+                word = ORMWord(phrase=phrase)
+                session.add(word)
+                session.flush()
+            if translation is not None:
+                existing = session.query(ORMTranslation).filter_by(word_id=word.id, language_id=lang.id).first()
+                if existing:
+                    existing.translation = translation
+                else:
+                    session.add(ORMTranslation(word_id=word.id, language_id=lang.id, translation=translation))
+            self.commit()
+            return mappers.map_word(word)
+        except Exception:
+            session.rollback()
+            raise
+
+    def delete_with_snapshot(self, word_id: int) -> dict:
+        """Capture all dependent rows before deleting, including filtered-out translations."""
+        session = self.db.session
+        tables = (ORMWord, ORMTranslation, ORMWordStats, ORMHistory, WordPause)
+        snapshot = {}
+        try:
+            for model in tables:
+                key = model.id if model is ORMWord else model.word_id
+                rows = session.query(model).populate_existing().filter(key == word_id).all()
+                snapshot[model.__tablename__] = [
+                    {column.name: getattr(row, column.name) for column in model.__table__.columns}
+                    for row in rows
+                ]
+            if not snapshot["words"]:
+                raise ValueError("This word has already been deleted. Refresh the browser.")
+            # Bulk delete uses database cascades, independent of partially loaded relationships.
+            session.query(ORMWord).filter_by(id=word_id).delete(synchronize_session=False)
+            self.commit()
+            session.expire_all()
+            return snapshot
+        except Exception:
+            session.rollback()
+            raise
+
+    def restore_snapshot(self, snapshot: dict) -> None:
+        """Restore original IDs and timestamps atomically; never overwrite newer data."""
+        session = self.db.session
+        try:
+            phrase = snapshot["words"][0]["phrase"]
+            if self.get_by_phrase(phrase):
+                raise ValueError("This phrase already exists. Undo would overwrite newer data.")
+            for model in (ORMWord, ORMTranslation, ORMWordStats, ORMHistory, WordPause):
+                for values in snapshot[model.__tablename__]:
+                    pk = values["word_id"] if model is WordPause else values["id"]
+                    if session.get(model, pk) is not None:
+                        raise ValueError("New data uses a deleted record's ID. Undo cannot safely restore it.")
+                    session.add(model(**values))
+                session.flush()
+            self.commit()
+            session.expire_all()
+        except Exception:
+            session.rollback()
+            raise
+
+    def get_export_rows(self, target_lang: str | None = None) -> list[Word]:
+        """One row per translation, retaining words without any translation."""
+        rows = self.db.session.query(ORMWord).populate_existing().options(
+            joinedload(ORMWord.translations).joinedload(ORMTranslation.language)
+        ).order_by(func.casefold(ORMWord.phrase), ORMWord.id).all()
+        result = []
+        for row in rows:
+            translations = sorted(row.translations, key=lambda item: item.language.code)
+            if target_lang:
+                translations = [item for item in translations if item.language.code == target_lang]
+            for translation in translations:
+                word = mappers.map_word(row)
+                word.translation = translation.translation
+                word.language_code = translation.language.code
+                result.append(word)
+            if not translations:
+                result.append(mappers.map_word(row))
+        return result
+
     def add(self, phrase: str) -> Word:
         """Add a word, return its domain entity."""
         orm_word = self.db.session.query(ORMWord).filter(func.casefold(ORMWord.phrase) == phrase.casefold()).first()
@@ -62,6 +149,7 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         sort: str = "phrase",
         descending: bool = False,
         untranslated: bool = False,
+        hidden_only: bool = False,
     ) -> list[Word]:
         """Get all words with stats."""
         lang = None
@@ -71,6 +159,10 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
                 return []
 
         query = self.db.session.query(ORMWord).populate_existing().options(joinedload(ORMWord.stats))
+        if hidden_only:
+            query = query.filter(self.db.session.query(WordPause.word_id).filter(
+                WordPause.word_id == ORMWord.id, WordPause.until > utc_now_ts()
+            ).exists())
 
         if lang:
             join = query.outerjoin if untranslated else query.join
@@ -112,7 +204,13 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         if limit is not None:
             query = query.limit(limit).offset(offset)
         orm_words = query.all()
-        return [mappers.map_word_with_details(w) for w in orm_words]
+        pauses = dict(self.db.session.query(WordPause.word_id, WordPause.until).filter(
+            WordPause.word_id.in_([word.id for word in orm_words])
+        ).all()) if orm_words else {}
+        words = [mappers.map_word_with_details(w) for w in orm_words]
+        for word in words:
+            word.hidden_until = pauses.get(word.id)
+        return words
 
     def get_for_review(self, limit: int = 20, target_lang: str | None = None) -> list[Word]:
         """Return due exposures, mixing in one new word per four notifications.

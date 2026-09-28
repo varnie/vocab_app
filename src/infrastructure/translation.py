@@ -153,6 +153,7 @@ class TranslationServiceImpl(AbstractTranslationService):
         target_lang: str = DEFAULT_TARGET_LANG,
         source_lang: str = DEFAULT_SOURCE_LANG,
         provider_name: str = DEFAULT_TRANSLATION_PROVIDER,
+        *, allow_fallback: bool = True,
     ) -> str:
         """Translate text using the specified provider.
 
@@ -160,7 +161,9 @@ class TranslationServiceImpl(AbstractTranslationService):
         in fallback order so translation keeps working even when one backend
         is blocked (e.g. Google returning HTTP 429).
         """
-        providers_to_try = [provider_name] + [p for p in self.FALLBACK_ORDER if p != provider_name]
+        providers_to_try = [provider_name]
+        if allow_fallback:
+            providers_to_try += [p for p in self.FALLBACK_ORDER if p != provider_name]
 
         last_error: Exception | None = None
         for name in providers_to_try:

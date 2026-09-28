@@ -23,6 +23,7 @@ class TranslationTestService:
                 target_lang or DEFAULT_TARGET_LANG,
                 source_lang or DEFAULT_SOURCE_LANG,
                 provider_name,
+                allow_fallback=False,
             )
             return bool(result)
         except Exception:

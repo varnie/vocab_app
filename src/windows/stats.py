@@ -96,10 +96,18 @@ class StatsWindow(BaseWindow):
         )
         dialog.set_current_name("vocabulary.csv")
         dialog.set_do_overwrite_confirmation(True)
+        language = Gtk.ComboBoxText()
+        language.append("all", "All languages")
+        current = self.vocab_service.settings_service.get_target_lang()
+        language.append(current, f"Current target language ({current.upper()})")
+        language.set_active_id("all")
+        language.show()
+        dialog.set_extra_widget(language)
 
         if dialog.run() == Gtk.ResponseType.OK:
             try:
-                self.vocab_service.export_csv(dialog.get_filename())
+                selected = language.get_active_id()
+                self.vocab_service.export_csv(dialog.get_filename(), None if selected == "all" else selected)
                 show_message(self, Gtk.MessageType.INFO, "Export successful!")
             except Exception as e:
                 show_message(self, Gtk.MessageType.ERROR, f"Export failed: {e}")

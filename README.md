@@ -114,6 +114,7 @@ Configure via System Settings → Keyboard → Shortcuts → Services, or use to
 - Translation runs in the background, with duplicate submissions disabled. Each
   provider runs in an isolated worker with a 15-second deadline; fallback can use
   up to three workers sequentially (approximately 45 seconds in the worst case).
+  Cancel or Escape closes the dialog and discards any late result without saving.
 - Existing translations are reused when adding the same phrase again. Double-click
   a browser row and choose **Translate again** to preview a fresh translation before saving.
 - Original capitalization is preserved. Duplicate lookup and search are Unicode
@@ -123,19 +124,30 @@ Configure via System Settings → Keyboard → Shortcuts → Services, or use to
   in the edit dialog removes that translation; the phrase stays in the library.
 - Column headers sort the entire result, including subsequent pages. The selected
   phrase and translation are shown below the table with wrapping and selectable text.
-- **Undo deletion** restores the last translation deleted with the browser's delete
-  button while that window remains open. It never overwrites a newer translation.
+- **Undo deletion** restores the last deleted translation or whole word while that
+  browser remains open. Whole-word restoration includes every language, timestamps,
+  review history and snooze. Conflicting newer records are never overwritten.
 - **Hide for 7 days** temporarily excludes a word from the exposure queue across
   languages; **Show again** removes that snooze. Neither action records an exposure.
+  **Hidden only** filters snoozed words; select a row to see its hidden-until date.
+- CSV export includes every translation by default, with an option for the current
+  target language. Untranslated words are retained as rows with an empty target.
+- **Test API** checks only the selected provider; normal translation still uses fallback.
 - **Pause / Resume…** chooses the next occurrence of a local time (within 24 hours).
   The pause survives restarts. Resume clears this pause; quiet hours still apply.
-- Enter submits the add/edit dialog; Escape closes windows when no save is in progress;
+- Enter submits the add/edit dialog; Escape closes windows;
   Ctrl+F focuses browser search. Statistics and today's list refresh on reopening
   and after GUI library changes. Their day boundary follows the local timezone.
 - Launching the GUI again opens the existing instance's browser through the desktop
   session bus. Exit an older running version before starting this version.
 
 ### Database Location
+
+Changing the data directory schedules the transfer for the next GUI start. Until
+then, writes continue in the current library. SQLite backup includes committed
+WAL data, and the original database is retained. An existing destination database
+is never overwritten, including when choosing **Start empty**. If the transfer
+fails, the app opens the original library and reports the error.
 
 - **Linux default**: `~/.local/share/vocab_app/vocab.db`
 - **macOS default**: `~/Library/Application Support/vocab_app/vocab.db`

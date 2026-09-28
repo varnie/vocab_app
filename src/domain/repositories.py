@@ -17,6 +17,18 @@ from domain.entities import (
 class AbstractWordRepository(ABC):
     """Abstract interface for word operations."""
 
+    def save_word(self, phrase: str, translation: str | None, target_lang: str) -> Word:
+        raise NotImplementedError
+
+    def delete_with_snapshot(self, word_id: int) -> dict:
+        raise NotImplementedError
+
+    def restore_snapshot(self, snapshot: dict) -> None:
+        raise NotImplementedError
+
+    def get_export_rows(self, target_lang: str | None = None) -> list[Word]:
+        raise NotImplementedError
+
     @abstractmethod
     def add(self, phrase: str) -> Word:
         """Add a word, return domain entity."""
@@ -38,6 +50,7 @@ class AbstractWordRepository(ABC):
         sort: str = "phrase",
         descending: bool = False,
         untranslated: bool = False,
+        hidden_only: bool = False,
     ) -> list[Word]:
         """Get all words with stats."""
         pass

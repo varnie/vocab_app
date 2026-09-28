@@ -13,6 +13,7 @@ class Word:
     translation: str = ""
     language_code: str = ""
     last_reviewed: int | None = None
+    hidden_until: int | None = None
 
 
 @dataclass

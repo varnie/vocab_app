@@ -57,6 +57,7 @@ class AbstractTranslationService(ABC):
         target_lang: str = DEFAULT_TARGET_LANG,
         source_lang: str = DEFAULT_SOURCE_LANG,
         provider_name: str = DEFAULT_TRANSLATION_PROVIDER,
+        *, allow_fallback: bool = True,
     ) -> str:
         """Translate text to target language using specified provider."""
         pass
@@ -73,6 +74,7 @@ class AbstractWordManagementService(ABC):
         auto_translate: bool = False,
         force_translate: bool = False,
         *, target_lang: str | None = None, source_lang: str | None = None,
+        persist: bool = True,
     ) -> Word:
         """Add a new word or add translation to existing word."""
         pass
@@ -87,6 +89,7 @@ class AbstractWordManagementService(ABC):
         sort: str = "phrase",
         descending: bool = False,
         untranslated: bool = False,
+        hidden_only: bool = False,
     ) -> list[Word]:
         """Get all words with optional search and language filter."""
         pass
@@ -138,7 +141,7 @@ class AbstractExportService(ABC):
     """Abstract interface for export operations."""
 
     @abstractmethod
-    def export_csv(self, filepath: str) -> None:
+    def export_csv(self, filepath: str, target_lang: str | None = None) -> None:
         """Export words to CSV."""
         pass
 

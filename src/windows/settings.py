@@ -28,7 +28,7 @@ from config import (
 from constants import DEFAULT_DATA_DIR, IS_MACOS
 from infrastructure.autostart import AutostartManager
 from infrastructure.config_file import read_config, write_config
-from infrastructure.data_relocation import DataDirChoice, RelocationVerdict, relocate_database
+from infrastructure.data_relocation import PENDING_RELOCATION_KEY, DataDirChoice, RelocationVerdict, relocate_database
 from infrastructure.translation import ProviderRegistry
 from version import get_version
 from windows import BaseWindow, padded_box
@@ -254,7 +254,7 @@ class SettingsWindow(BaseWindow):
 
         # Read from config file if available (JSON)
         config = read_config(self.config_file) if self.config_file else {}
-        custom_data_dir = config.get(DATA_DIR_KEY, "")
+        custom_data_dir = config.get(PENDING_RELOCATION_KEY, {}).get("data_dir", config.get(DATA_DIR_KEY, ""))
 
         self.data_dir_entry = Gtk.Entry()
         self.data_dir_entry.set_text(custom_data_dir)
@@ -339,7 +339,7 @@ class SettingsWindow(BaseWindow):
             "The data directory changed.\n"
             "What should happen to your existing vocabulary?",
         )
-        dialog.add_button("Move my words", Gtk.ResponseType.YES)
+        dialog.add_button("Copy my words on restart", Gtk.ResponseType.YES)
         dialog.add_button("Start empty", Gtk.ResponseType.NO)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         response = dialog.run()
@@ -373,28 +373,25 @@ class SettingsWindow(BaseWindow):
 
         new_data_dir = self.data_dir_entry.get_text().strip()
 
-        db_relocated = False
-        fresh_library = False
         data_dir_changed = False
         if self.config_file:
             config = read_config(self.config_file)
             old_data_dir = config.get(DATA_DIR_KEY, "")
-            if old_data_dir != new_data_dir:
+            pending_dir = config.get(PENDING_RELOCATION_KEY, {}).get("data_dir")
+            if old_data_dir != new_data_dir and pending_dir != new_data_dir:
                 data_dir_changed = True
                 result = relocate_database(self.config_file, new_data_dir, self._ask_data_dir_choice)
                 if result.verdict is RelocationVerdict.CANCELLED:
                     return
-                if result.verdict is RelocationVerdict.MOVED:
-                    db_relocated = True
-                elif result.verdict is RelocationVerdict.START_EMPTY:
-                    fresh_library = True
-                elif result.verdict is RelocationVerdict.FAILED:
+                if result.verdict is RelocationVerdict.FAILED:
                     self.status_label.set_text(result.error)
                     return
-            config[DATA_DIR_KEY] = new_data_dir
-            if not write_config(self.config_file, config):
-                self.status_label.set_text("Failed to write the config file. Settings were not saved.")
-                return
+            elif old_data_dir == new_data_dir and PENDING_RELOCATION_KEY in config:
+                del config[PENDING_RELOCATION_KEY]
+                if not write_config(self.config_file, config):
+                    self.status_label.set_text("Could not cancel the pending directory change.")
+                    return
+            data_dir_changed = data_dir_changed or pending_dir == new_data_dir
 
         self.vocab_service.save_settings(settings)
 
@@ -405,23 +402,12 @@ class SettingsWindow(BaseWindow):
             AutostartManager.disable()
 
         # Show confirmation
-        if db_relocated:
+        if data_dir_changed:
             msg_text = (
                 "Settings saved!\n\n"
-                "Your vocabulary was moved to the new location.\n"
-                "Restart the app to use it."
-            )
-        elif fresh_library:
-            msg_text = (
-                "Settings saved!\n\n"
-                "Note: you chose to start empty — after restart the app will use "
-                "a separate, empty library in the new location.\n"
-                "Your old vocabulary stays where it was."
-            )
-        elif data_dir_changed:
-            msg_text = (
-                "Settings saved!\n\n"
-                "Note: you need to restart the app for data directory changes to take effect."
+                "The directory change is scheduled for the next app start.\n"
+                "Until then, all changes are saved in the current library.\n"
+                "The original database will be kept as a backup."
             )
         else:
             msg_text = "Settings saved successfully!"

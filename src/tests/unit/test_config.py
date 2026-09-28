@@ -43,42 +43,37 @@ class TestReadConfig:
 class TestWriteConfig:
     """Tests for write_config function."""
 
-    def test_write_config_success(self):
+    def test_write_config_success(self, tmp_path):
         """Test that write_config writes JSON successfully."""
         test_data = {"key": "value"}
-        mock_file = mock_open()
-        with patch("builtins.open", mock_file):
-            with patch("infrastructure.config_file.os.path.dirname", return_value="/tmp"):
-                with patch("infrastructure.config_file.os.makedirs"):
-                    result = write_config("/tmp/config.json", test_data)
-                    assert result is True
-                    mock_file().write.assert_called()
+        path = tmp_path / "config.json"
+        assert write_config(str(path), test_data)
+        assert json.loads(path.read_text()) == test_data
 
-    def test_write_config_creates_directory(self):
+    def test_write_config_creates_directory(self, tmp_path):
         """Test that write_config creates directory if needed."""
         test_data = {"key": "value"}
-        with patch("builtins.open", mock_open()):
-            with patch("infrastructure.config_file.os.path.dirname", return_value="/tmp/subdir"):
-                with patch("infrastructure.config_file.os.makedirs") as mock_makedirs:
-                    write_config("/tmp/subdir/config.json", test_data)
-                    mock_makedirs.assert_called_once_with("/tmp/subdir", exist_ok=True)
+        path = tmp_path / "nested" / "config.json"
+        assert write_config(str(path), test_data)
+        assert json.loads(path.read_text()) == test_data
 
-    def test_write_config_no_directory(self):
+    def test_write_config_no_directory(self, tmp_path, monkeypatch):
         """Test write_config when config_file has no directory."""
         test_data = {"key": "value"}
-        with patch("builtins.open", mock_open()):
-            with patch("infrastructure.config_file.os.path.dirname", return_value=""):
-                with patch("infrastructure.config_file.os.makedirs") as mock_makedirs:
-                    result = write_config("infrastructure.config_file.json", test_data)
-                    assert result is True
-                    mock_makedirs.assert_not_called()
+        monkeypatch.chdir(tmp_path)
+        assert write_config("config.json", test_data)
+        assert json.loads((tmp_path / "config.json").read_text()) == test_data
 
-    def test_write_config_exception_handling(self):
+    def test_write_config_exception_handling(self, tmp_path):
         """Test that write_config handles exceptions gracefully."""
         test_data = {"key": "value"}
-        with patch("builtins.open", side_effect=PermissionError("No permission")):
-            result = write_config("/tmp/config.json", test_data)
+        path = tmp_path / "config.json"
+        path.write_text('{"original": true}')
+        with patch("infrastructure.config_file.os.replace", side_effect=PermissionError("No permission")):
+            result = write_config(str(path), test_data)
             assert result is False
+        assert json.loads(path.read_text()) == {"original": True}
+        assert list(tmp_path.iterdir()) == [path]
 
 
 class TestDefaultSettings:

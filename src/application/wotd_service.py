@@ -74,7 +74,9 @@ class WOTDService(AbstractWOTDService):
         if not translation:
             return None
 
-        word_entity, saved = self.save_wotd_to_vocab(word, translation)
+        word_entity, saved = self.save_wotd_to_vocab(
+            word, translation, target_lang=target_lang, source_lang=source_lang
+        )
         if not saved or word_entity is None:
             return None
 
@@ -95,12 +97,14 @@ class WOTDService(AbstractWOTDService):
         return (entry.word, translation, entry.level)
 
     def save_wotd_to_vocab(
-        self, word: str, translation: str | None = None
+        self, word: str, translation: str | None = None,
+        *, target_lang: str | None = None, source_lang: str | None = None,
     ) -> tuple[Word | None, bool]:
         """Save WOTD word to user's vocabulary."""
         try:
             result = self.word_service.add_word(
-                word, translation, auto_translate=(translation is None)
+                word, translation, auto_translate=(translation is None),
+                target_lang=target_lang, source_lang=source_lang,
             )
             return result, True
         except Exception as e:
