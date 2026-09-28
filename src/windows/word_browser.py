@@ -62,7 +62,7 @@ class WordBrowserWindow(BaseWindow):
         toolbar.pack_start(self.search_entry, False, False, 0)
 
         # Language filter
-        toolbar.pack_start(Gtk.Label(label="Language:"), False, False, 5)
+        toolbar.pack_start(Gtk.Label(label="Target Language:"), False, False, 5)
 
         self.lang_combo = Gtk.ComboBoxText()
         settings = self.vocab_service.get_settings()

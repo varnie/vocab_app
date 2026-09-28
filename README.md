@@ -24,8 +24,8 @@ A lightweight vocabulary learning app with system tray and spaced repetition. Su
 
 Window contents below use demo vocabulary; decorations and theme depend on your desktop.
 
-### Popup Notification
-![Popup](docs/screenshot-popup.png)
+### System Tray Menu
+![Current system tray menu](docs/screenshot-popup.png)
 
 ### Add Word Dialog
 ![Add Word](docs/screenshot-add-word.png)
@@ -40,7 +40,7 @@ Window contents below use demo vocabulary; decorations and theme depend on your 
 ![Word Browser](docs/screenshot-word-browser.png)
 
 ### Popup Translation Message
-![Stats](docs/screenshot-message.png)
+![Word notification with translation](docs/screenshot-message.png)
 
 ## GUI App (Recommended)
 
