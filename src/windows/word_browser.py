@@ -496,7 +496,6 @@ class WordBrowserWindow(BaseWindow):
         def translate(_button):
             phrase = word_entry.get_text().strip()
             source = self.vocab_service.settings_service.get_source_lang()
-            provider = self.vocab_service.settings_service.get_translation_provider()
             translate_btn.set_sensitive(False)
             for entry in (word_entry, trans_entry):
                 entry.set_sensitive(False)
@@ -514,8 +513,8 @@ class WordBrowserWindow(BaseWindow):
                         trans_entry.set_text(result)
 
             self.run_background(
-                lambda: self.vocab_service.word_service.translation_service.translate(
-                    phrase, target_lang, source, provider
+                lambda: self.vocab_service.translate_preview(
+                    phrase, target_lang, source
                 ), complete,
             )
 

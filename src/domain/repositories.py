@@ -9,7 +9,7 @@ from domain.entities import (
     Stats,
     Translation,
     Word,
-    WordStats,
+    WordSnapshot,
     WOTDHistory,
 )
 
@@ -20,10 +20,10 @@ class AbstractWordRepository(ABC):
     def save_word(self, phrase: str, translation: str | None, target_lang: str) -> Word:
         raise NotImplementedError
 
-    def delete_with_snapshot(self, word_id: int) -> dict:
+    def delete_with_snapshot(self, word_id: int) -> WordSnapshot:
         raise NotImplementedError
 
-    def restore_snapshot(self, snapshot: dict) -> None:
+    def restore_snapshot(self, snapshot: WordSnapshot) -> None:
         raise NotImplementedError
 
     def get_export_rows(self, target_lang: str | None = None) -> list[Word]:
@@ -89,11 +89,6 @@ class AbstractWordRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def delete_by_id(self, word_id: int) -> None:
-        """Delete a word by ID."""
-        pass
-
-    @abstractmethod
     def delete_translation(self, word_id: int, target_lang: str) -> None:
         """Delete translation for a specific language."""
         pass
@@ -101,18 +96,6 @@ class AbstractWordRepository(ABC):
 
 class AbstractStatsRepository(ABC):
     """Abstract interface for statistics operations."""
-
-    @abstractmethod
-    def update_word_stats(
-        self, word_id: int
-    ) -> None:
-        """Update word stats (set last_reviewed to now)."""
-        pass
-
-    @abstractmethod
-    def get_word_stats(self, word_id: int) -> WordStats | None:
-        """Get stats for a word."""
-        pass
 
     @abstractmethod
     def record_review(self, word_id: int, update_stats: bool = False) -> History:

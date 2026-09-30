@@ -23,7 +23,7 @@ class TestWordRepositoryIntegration:
         assert updated is not None
 
         # Delete
-        word_repo.delete_by_id(word.id)
+        word_repo.delete("updatedword")
         deleted = word_repo.get_by_phrase("updatedword")
         assert deleted is None
 
@@ -41,11 +41,13 @@ class TestWordRepositoryIntegration:
         """Test recording review stats."""
         word = word_repo.add("statstest")
 
-        stats_repo.update_word_stats(word.id)
-        record = stats_repo.get_word_stats(word.id)
+        history = stats_repo.record_review(word.id, update_stats=True)
+        record = word_repo.get_by_phrase("statstest")
 
         assert record is not None
         assert record.last_reviewed is not None
+        assert record.last_reviewed == history.reviewed_at
+        assert stats_repo.get_stats().total_reviews == 1
 
 
 class TestWOTDRepositoryIntegration:

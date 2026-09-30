@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from application.translation_test_service import TranslationTestService
 from bootstrap import create_vocab_service
+from domain.entities import WordSnapshot
 from domain.exceptions import TranslationError
 from infrastructure.config_file import read_config, write_config
 from infrastructure.data_paths import get_db_path
@@ -49,6 +50,9 @@ def test_whole_word_undo_restores_every_row_after_filtered_query(library):
     before = rows(library)
     assert library.get_words(target_lang="ru", untranslated=True)[0].translation == ""
     snapshot = library.delete_word_with_undo(word.id)
+    assert isinstance(snapshot, WordSnapshot)
+    assert snapshot.word.phrase == "Hello"
+    assert len(snapshot.translations) == 2
     assert all(not values for values in rows(library).values())
     library.restore_word(snapshot)
     assert rows(library) == before

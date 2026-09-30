@@ -57,7 +57,6 @@ This will create a virtual environment and install all dependencies:
 - `sqlalchemy` - Database ORM
 - `deep-translator` - Translation library
 - `pytest` - Testing framework
-- `pytest-mock` - Mock support
 - `pytest-cov` - Coverage reports
 
 #### Platform-specific dependencies

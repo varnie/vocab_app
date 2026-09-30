@@ -56,6 +56,25 @@ class History:
 
 
 @dataclass
+class WordPause:
+    """A word hidden until a Unix timestamp."""
+
+    word_id: int
+    until: int
+
+
+@dataclass
+class WordSnapshot:
+    """Complete vocabulary entry retained for undo, independent of storage tables."""
+
+    word: Word
+    translations: tuple[Translation, ...]
+    stats: tuple[WordStats, ...]
+    history: tuple[History, ...]
+    pauses: tuple[WordPause, ...]
+
+
+@dataclass
 class WOTDHistory:
     """Domain entity for Word of the Day history."""
 

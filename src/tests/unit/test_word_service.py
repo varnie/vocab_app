@@ -9,6 +9,20 @@ from domain.time_utils import local_today_start_ts
 class TestWordManagementService:
     """Tests for WordManagementService."""
 
+    def test_translation_preview_uses_settings_without_saving(self, word_service, word_repo):
+        word_service.settings_service.set_setting("translation_provider", "google_direct")
+        result = word_service.translate_preview("  Hello  ", "fr", "en")
+        assert result == "тест"
+        word_service.translation_service.translate.assert_called_once_with(
+            "Hello", "fr", "en", "google_direct"
+        )
+        assert word_repo.get_by_phrase("Hello") is None
+
+    def test_translation_preview_rejects_empty_draft(self, word_service):
+        with pytest.raises(ValueError, match="Phrase cannot be empty"):
+            word_service.translate_preview("  ", "fr", "en")
+        word_service.translation_service.translate.assert_not_called()
+
     def test_add_word_success(self, word_service):
         """Test adding a new word successfully."""
         word = word_service.add_word("hello", translation="привет")
@@ -78,10 +92,10 @@ class TestWordManagementService:
         words = word_service.get_words(search="todelete")
         assert len(words) == 0
 
-    def test_delete_word_by_id(self, word_service):
-        """Test deleting word by ID."""
+    def test_delete_word_with_undo(self, word_service):
+        """Test deleting a word through the browser use case."""
         word = word_service.add_word("byid", translation="по id")
-        word_service.delete_word_by_id(word.id)
+        word_service.delete_word_with_undo(word.id)
 
         words = word_service.get_words(search="byid")
         assert len(words) == 0

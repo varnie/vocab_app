@@ -13,6 +13,13 @@ from domain.time_utils import local_today_start_ts
 from infrastructure.models import History, WordStats
 
 
+@pytest.fixture
+def library(tmp_path):
+    service = create_vocab_service(db_path=str(tmp_path / "vocab.db"))
+    yield service
+    service.close()
+
+
 def test_edit_uses_displayed_language_and_preserves_spelling(word_service, word_repo):
     word = word_service.add_word("Hello", "привет")
     word_repo.add_translation(word.id, "bonjour", "fr")
@@ -65,28 +72,24 @@ def test_untranslated_filter_respects_selected_language(word_service, word_repo)
     assert de_missing == ["apple", "banana"]
 
 
-def test_delete_word_by_id_removes_word_and_translations(word_service, word_repo):
+def test_delete_word_with_undo_removes_word_and_translations(library):
     """Whole-word delete (browser popup for untranslated rows)."""
-    word = word_service.add_word("Gone", "Ушедший")
+    word = library.add_word("Gone", "Ушедший")
 
-    word_service.delete_word_by_id(word.id)
+    library.delete_word_with_undo(word.id)
 
-    assert word_repo.get_by_phrase("gone") is None
-    assert word_repo.get_translation(word.id, "ru") is None
+    assert library.get_words() == []
+    assert library.get_translation(word.id) is None
 
 
-def test_undo_word_delete_restores_word_with_translation(word_service, word_repo):
-    """Undo of a whole-word delete re-adds the word and its translation."""
-    word = word_service.add_word("Back", "Назад")
-    lang = "ru"
-    phrase, translation = word.phrase, word.translation
-    word_service.delete_word_by_id(word.id)
-    assert word_repo.get_by_phrase("back") is None
-
-    restored = word_service.add_word(phrase)
-    word_service.update_word(restored.id, phrase, translation, lang)
-
-    assert word_repo.get_translation(restored.id, lang).translation == "Назад"
+def test_undo_word_delete_restores_word_with_translation(library):
+    """Undo restores the original word and translation."""
+    word = library.add_word("Back", "Назад")
+    snapshot = library.delete_word_with_undo(word.id)
+    assert library.get_words() == []
+    library.restore_word(snapshot)
+    assert library.get_words()[0].id == word.id
+    assert library.get_translation(word.id) == "Назад"
 
 
 def test_clear_translation_and_undo(word_service, word_repo):
@@ -176,7 +179,7 @@ def test_quiet_hours_and_pause_cover_wotd(settings_service):
         assert settings_service.is_quiet_time()
         scheduler = ReviewScheduler(
             MagicMock(), MagicMock(), settings_service, MagicMock(), MagicMock(),
-            MagicMock(), MagicMock(), MagicMock(),
+            MagicMock(), MagicMock(),
         )
         scheduler._check_wotd()
         scheduler.wotd_service.get_word_of_the_day.assert_not_called()

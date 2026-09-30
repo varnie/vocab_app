@@ -59,13 +59,11 @@ class MacOSTray:
                 mi = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
                     title, "menuAction:", ""
                 )
-                mi.setTarget_(self._delegate if hasattr(self, "_delegate") else None)
                 mi.setTag_(action_index)
                 mi.setEnabled_(True)
                 menu.addItem_(mi)
                 if key == "pause":
                     self._pause_item = mi
-                    self._pause_tag = action_index
                 action_index += 1
 
         self._delegate = _MenuDelegate.alloc().initWithCallbacks_(tag_callbacks)

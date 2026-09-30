@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func
 
-from domain.entities import History, Stats, WordStats
+from domain.entities import History, Stats
 from domain.repositories import AbstractStatsRepository
 from domain.time_utils import local_today_start_ts, utc_now_ts
 from infrastructure import mappers
@@ -18,31 +18,6 @@ from repositories.base import AbstractRepository
 
 class StatsRepository(AbstractStatsRepository, AbstractRepository):
     """Repository for word statistics."""
-
-    def update_word_stats(
-        self, word_id: int
-    ) -> None:
-        """Update word stats (set last_reviewed to now)."""
-        now = utc_now_ts()
-        stats = self.db.session.query(ORMWordStats).filter_by(word_id=word_id).first()
-
-        if stats:
-            stats.last_reviewed = now
-        else:
-            stats = ORMWordStats(
-                word_id=word_id,
-                last_reviewed=now,
-            )
-            self.db.session.add(stats)
-
-        self.commit()
-
-    def get_word_stats(self, word_id: int) -> WordStats | None:
-        """Get stats for a word."""
-        orm = self.db.session.query(ORMWordStats).filter_by(word_id=word_id).first()
-        if not orm:
-            return None
-        return mappers.map_word_stats(orm)
 
     def record_review(self, word_id: int, update_stats: bool = False) -> History:
         """Record a review in history and return domain entity."""
@@ -106,14 +81,12 @@ class StatsRepository(AbstractStatsRepository, AbstractRepository):
                 streak += 1
                 check_date -= timedelta(days=1)
 
-        return mappers.map_stats(
-            {
-                "total_words": total,
-                "today_words": today_words,
-                "today_reviews": today_reviews,
-                "total_reviews": total_reviews,
-                "streak": streak,
-            }
+        return Stats(
+            total_words=total,
+            today_words=today_words,
+            today_reviews=today_reviews,
+            total_reviews=total_reviews,
+            streak=streak,
         )
 
     def get_language_counts(self) -> dict:

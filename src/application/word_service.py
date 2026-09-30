@@ -7,7 +7,7 @@ from application.service_interfaces import (
     AbstractTranslationService,
     AbstractWordManagementService,
 )
-from domain.entities import Word
+from domain.entities import Word, WordSnapshot
 from domain.exceptions import TranslationError
 from domain.repositories import AbstractLanguageRepository, AbstractWordRepository
 from domain.time_utils import local_today_start_ts
@@ -51,13 +51,6 @@ class WordManagementService(AbstractWordManagementService):
                 f"Phrase length must be {self.MIN_PHRASE_LENGTH}-{self.MAX_PHRASE_LENGTH}"
             )
         return phrase
-
-    def _get_or_create_id(self, phrase: str) -> int:
-        """Return the id of an existing word or create it."""
-        existing = self.word_repo.get_by_phrase(phrase)
-        if existing:
-            return existing.id
-        return self.word_repo.add(phrase).id
 
     def add_word(
         self, phrase: str, translation: str | None = None, auto_translate: bool = False,
@@ -105,7 +98,7 @@ class WordManagementService(AbstractWordManagementService):
             # No translation requested: just store the word as-is.
             if not persist:
                 return Word(phrase=phrase, language_code=target_lang)
-            self._get_or_create_id(phrase)
+            self.word_repo.add(phrase)
 
         result = self.word_repo.get_by_phrase(phrase)
         if result is None:
@@ -166,10 +159,17 @@ class WordManagementService(AbstractWordManagementService):
     def snooze_word(self, word_id: int, until: int) -> None:
         self.word_repo.snooze_word(word_id, until)
 
-    def delete_word_with_undo(self, word_id: int) -> dict:
+    def translate_preview(self, phrase: str, target_lang: str, source_lang: str) -> str:
+        """Translate a validated draft without changing the vocabulary."""
+        return self.translation_service.translate(
+            self._normalize_phrase(phrase), target_lang, source_lang,
+            self.settings_service.get_translation_provider(),
+        )
+
+    def delete_word_with_undo(self, word_id: int) -> WordSnapshot:
         return self.word_repo.delete_with_snapshot(word_id)
 
-    def restore_word(self, snapshot: dict) -> None:
+    def restore_word(self, snapshot: WordSnapshot) -> None:
         self.word_repo.restore_snapshot(snapshot)
 
     def restore_translation(self, word_id: int, translation: str, target_lang: str) -> None:
@@ -181,10 +181,6 @@ class WordManagementService(AbstractWordManagementService):
     def delete_word(self, phrase: str) -> None:
         """Delete a word."""
         self.word_repo.delete(phrase)
-
-    def delete_word_by_id(self, word_id: int) -> None:
-        """Delete a word by ID."""
-        self.word_repo.delete_by_id(word_id)
 
     def delete_translation(self, word_id: int, target_lang: str) -> None:
         """Delete only translation for specific language, not the word."""

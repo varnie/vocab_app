@@ -16,7 +16,7 @@ from config import (
     TARGET_LANG_KEY,
     TRANSLATION_PROVIDER_KEY,
 )
-from domain.entities import Word
+from domain.entities import Word, WordSnapshot
 
 CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
@@ -41,11 +41,6 @@ class WordSource(ABC):
         """
         pass
 
-    @abstractmethod
-    def get_available_levels(self) -> list[str]:
-        """Get list of available CEFR levels."""
-        pass
-
 
 class AbstractTranslationService(ABC):
     """Abstract interface for translation operations."""
@@ -65,6 +60,21 @@ class AbstractTranslationService(ABC):
 
 class AbstractWordManagementService(ABC):
     """Abstract interface for word management operations."""
+
+    @abstractmethod
+    def translate_preview(self, phrase: str, target_lang: str, source_lang: str) -> str:
+        """Translate a draft without saving it."""
+        pass
+
+    @abstractmethod
+    def delete_word_with_undo(self, word_id: int) -> WordSnapshot:
+        """Delete an entry and retain its complete domain data for undo."""
+        pass
+
+    @abstractmethod
+    def restore_word(self, snapshot: WordSnapshot) -> None:
+        """Restore a deleted entry without overwriting newer data."""
+        pass
 
     @abstractmethod
     def add_word(
@@ -127,11 +137,6 @@ class AbstractWordManagementService(ABC):
         pass
 
     @abstractmethod
-    def delete_word_by_id(self, word_id: int) -> None:
-        """Delete a word by ID."""
-        pass
-
-    @abstractmethod
     def delete_translation(self, word_id: int, target_lang: str) -> None:
         """Delete only translation for specific language, not the word."""
         pass
@@ -176,11 +181,6 @@ class AbstractReviewService(ABC):
     @abstractmethod
     def review_word(self, word_id: int) -> None:
         """Record a review and update its last-reviewed timestamp."""
-        pass
-
-    @abstractmethod
-    def skip_word(self, word_id: int) -> None:
-        """Skip word - mark as reviewed."""
         pass
 
     @abstractmethod
@@ -270,7 +270,8 @@ class AbstractWOTDService(ABC):
 
     @abstractmethod
     def save_wotd_to_vocab(
-        self, word: str, translation: str | None = None
+        self, word: str, translation: str | None = None,
+        *, target_lang: str | None = None, source_lang: str | None = None,
     ) -> tuple[Word | None, bool]:
         """Save WOTD word to user's vocabulary."""
         pass

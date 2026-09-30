@@ -34,21 +34,18 @@ class ReviewScheduler:
         notify_callback: Callable[..., None],
         label_callback: Callable[[str], None],
         notification_service: AbstractNotificationService,
-        read_phrase: Callable[[], str | None],
         write_phrase: Callable[[str], None],
         cleanup_callback: Callable[[], None] | None = None,
     ) -> None:
         self.review_service = review_service
         self.wotd_service = wotd_service
         self.settings_service = settings_service
-        self._read_phrase = read_phrase
         self._write_phrase = write_phrase
         self._notify = notify_callback
         self._update_label = label_callback
         self._cleanup_session = cleanup_callback or (lambda: None)
         self._notification_service = notification_service
 
-        self.current_word = None
         self.paused_until = 0.0
         try:
             stored_pause = self.settings_service.get_setting(PAUSED_UNTIL_KEY, "0")
@@ -78,21 +75,6 @@ class ReviewScheduler:
         if self._wotd_timer is not None:
             self._wotd_timer.cancel()
 
-    def on_pause(self) -> str:
-        """Toggle pause/resume reviews. Returns the new pause label text."""
-        now = time.time()
-        with self._state_lock:
-            if self.paused_until > now:
-                self.paused_until = 0.0
-                label = "Pause (1 hour)"
-            else:
-                self.paused_until = now + 3600
-                label = "Resume"
-            paused_until = self.paused_until
-        self.settings_service.set_setting(PAUSED_UNTIL_KEY, str(paused_until))
-        self._settings_changed.set()
-        return label
-
     def pause_until(self, timestamp: float) -> None:
         with self._state_lock:
             self.paused_until = timestamp
@@ -108,18 +90,8 @@ class ReviewScheduler:
         """Show next word immediately. Returns the Word or None."""
         word = self.review_service.get_next_word()
         if word:
-            with self._state_lock:
-                self.current_word = word
             self._show_word_popup(word)
         return word
-
-    def get_current_phrase(self) -> str | None:
-        """Get current word from temp file or in-memory current_word."""
-        phrase = self._read_phrase()
-        if phrase:
-            return phrase
-        with self._state_lock:
-            return self.current_word.phrase if self.current_word else None
 
     def _show_word_popup(self, word) -> None:
         """Show word notification."""
@@ -185,8 +157,6 @@ class ReviewScheduler:
 
                 word = self.review_service.get_next_word()
                 if word:
-                    with self._state_lock:
-                        self.current_word = word
                     self._show_word_popup(word)
                     self._update_label(str(word.phrase)[:20])
                     for _ in range(interval // 60):

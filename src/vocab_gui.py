@@ -15,7 +15,7 @@ from application.review_scheduler import ReviewScheduler
 from bootstrap import create_vocab_service
 from config import GNOME_TRAY_WARNING_KEY
 from constants import CONFIG_FILE, ICONS_DIR, IS_LINUX, IS_MACOS
-from infrastructure.current_phrase import read_current_phrase, write_current_phrase
+from infrastructure.current_phrase import write_current_phrase
 from infrastructure.notifications import send_notification
 from windows.add_word import AddWordDialog
 from windows.settings import SettingsWindow
@@ -76,9 +76,6 @@ class VocabApp(Gtk.Application):
             self.vocab_service = create_vocab_service(self.config_file)
         except Exception as e:
             logger.exception("Error creating vocab_service: %s", e)
-            import traceback
-
-            traceback.print_exc()
             sys.exit(1)
         if not self.vocab_service:
             error_dialog = Gtk.MessageDialog(
@@ -98,7 +95,6 @@ class VocabApp(Gtk.Application):
             review_service=self.vocab_service.review_service,
             wotd_service=self.vocab_service.wotd_service,
             settings_service=self.vocab_service.settings_service,
-            read_phrase=read_current_phrase,
             write_phrase=write_current_phrase,
             notify_callback=self.notify,
             # ReviewScheduler invokes this callback from its worker thread.
@@ -121,9 +117,6 @@ class VocabApp(Gtk.Application):
                     "install 'Top Icons' or 'Tray Icons' extension.",
                 )
                 self.vocab_service.set_setting(GNOME_TRAY_WARNING_KEY, "true")
-
-    def do_activate(self):
-        Gtk.Application.do_activate(self)
 
     def _on_activate(self, app):
         # The first activation stays unobtrusive; subsequent launches open the library.
@@ -148,8 +141,6 @@ class VocabApp(Gtk.Application):
             win = self._windows[key]
             if hasattr(win, "refresh"):
                 win.refresh()
-            elif hasattr(win, "load_words"):
-                win.load_words()
             self._windows[key].present()
         else:
             win = create_fn()
@@ -207,10 +198,7 @@ class VocabApp(Gtk.Application):
             for key in ("browser", "stats", "words_today"):
                 win = self._windows.get(key)
                 if win:
-                    if hasattr(win, "refresh"):
-                        win.refresh()
-                    elif hasattr(win, "load_words"):
-                        win.load_words()
+                    win.refresh()
 
         def create_window():
             win = AddWordDialog(self.vocab_service, on_add)

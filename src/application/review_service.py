@@ -32,10 +32,6 @@ class ReviewService(AbstractReviewService):
     def next_available_at(self) -> int | None:
         return self.word_repo.next_available_at(self.settings_service.get_target_lang())
 
-    def skip_word(self, word_id: int) -> None:
-        """Skip word - record review without updating stats."""
-        self.stats_repo.record_review(word_id)
-
     def get_stats(self) -> dict:
         """Get statistics."""
         stats = self.stats_repo.get_stats()

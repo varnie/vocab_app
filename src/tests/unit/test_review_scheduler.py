@@ -1,5 +1,6 @@
 """Regression tests for the background review loop."""
 
+import time
 from unittest.mock import MagicMock, patch
 
 from application.review_scheduler import ReviewScheduler
@@ -7,10 +8,10 @@ from application.review_scheduler import ReviewScheduler
 
 def test_pause_wait_blocks_again_after_consuming_wakeup():
     scheduler = ReviewScheduler(
-        MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
     )
     scheduler.running = True
-    scheduler.on_pause()
+    scheduler.pause_until(time.time() + 3600)
     wakeups = []
     real_wait = scheduler._settings_changed.wait
 

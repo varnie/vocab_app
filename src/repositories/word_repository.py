@@ -1,11 +1,13 @@
 """Word repository - handles word CRUD operations."""
 
+from dataclasses import asdict
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import aliased, contains_eager, joinedload
 
 from config import DEFAULT_TARGET_LANG
-from domain.entities import Translation, Word
+from domain.entities import Translation, Word, WordSnapshot
+from domain.entities import WordPause as PauseSnapshot
 from domain.repositories import AbstractWordRepository
 from domain.review_policy import EXPOSURE_INTERVALS, NEW_WORD_SPACING
 from domain.time_utils import utc_now_ts
@@ -50,21 +52,25 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
             session.rollback()
             raise
 
-    def delete_with_snapshot(self, word_id: int) -> dict:
+    def delete_with_snapshot(self, word_id: int) -> WordSnapshot:
         """Capture all dependent rows before deleting, including filtered-out translations."""
         session = self.db.session
-        tables = (ORMWord, ORMTranslation, ORMWordStats, ORMHistory, WordPause)
-        snapshot = {}
         try:
-            for model in tables:
-                key = model.id if model is ORMWord else model.word_id
-                rows = session.query(model).populate_existing().filter(key == word_id).all()
-                snapshot[model.__tablename__] = [
-                    {column.name: getattr(row, column.name) for column in model.__table__.columns}
-                    for row in rows
-                ]
-            if not snapshot["words"]:
+            word = session.query(ORMWord).populate_existing().filter_by(id=word_id).first()
+            if word is None:
                 raise ValueError("This word has already been deleted. Refresh the browser.")
+
+            def related(model, mapper):
+                rows = session.query(model).populate_existing().filter_by(word_id=word_id).all()
+                return tuple(mapper(row) for row in rows)
+
+            snapshot = WordSnapshot(
+                word=mappers.map_word(word),
+                translations=related(ORMTranslation, mappers.map_translation),
+                stats=related(ORMWordStats, mappers.map_word_stats),
+                history=related(ORMHistory, mappers.map_history),
+                pauses=related(WordPause, lambda row: PauseSnapshot(row.word_id, row.until)),
+            )
             # Bulk delete uses database cascades, independent of partially loaded relationships.
             session.query(ORMWord).filter_by(id=word_id).delete(synchronize_session=False)
             self.commit()
@@ -74,15 +80,25 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
             session.rollback()
             raise
 
-    def restore_snapshot(self, snapshot: dict) -> None:
+    def restore_snapshot(self, snapshot: WordSnapshot) -> None:
         """Restore original IDs and timestamps atomically; never overwrite newer data."""
         session = self.db.session
         try:
-            phrase = snapshot["words"][0]["phrase"]
+            phrase = snapshot.word.phrase
             if self.get_by_phrase(phrase):
                 raise ValueError("This phrase already exists. Undo would overwrite newer data.")
-            for model in (ORMWord, ORMTranslation, ORMWordStats, ORMHistory, WordPause):
-                for values in snapshot[model.__tablename__]:
+            word_values = {
+                "id": snapshot.word.id, "phrase": phrase, "created_at": snapshot.word.created_at,
+            }
+            records = (
+                (ORMWord, [word_values]),
+                (ORMTranslation, [asdict(row) for row in snapshot.translations]),
+                (ORMWordStats, [asdict(row) for row in snapshot.stats]),
+                (ORMHistory, [asdict(row) for row in snapshot.history]),
+                (WordPause, [asdict(row) for row in snapshot.pauses]),
+            )
+            for model, rows in records:
+                for values in rows:
                     pk = values["word_id"] if model is WordPause else values["id"]
                     if session.get(model, pk) is not None:
                         raise ValueError("New data uses a deleted record's ID. Undo cannot safely restore it.")
@@ -414,13 +430,6 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         ).join(ORMLanguage, ORMLanguage.id == ORMTranslation.language_id).outerjoin(
             counts, counts.c.word_id == ORMWord.id
         ).outerjoin(ORMWordStats).outerjoin(WordPause).filter(ORMLanguage.code == target_lang).scalar()
-
-    def delete_by_id(self, word_id: int) -> None:
-        """Delete a word by ID."""
-        orm_word = self.db.session.query(ORMWord).filter_by(id=word_id).first()
-        if orm_word:
-            self.db.session.delete(orm_word)
-            self.commit()
 
     def delete_translation(self, word_id: int, target_lang: str) -> None:
         """Delete translation for a specific language."""

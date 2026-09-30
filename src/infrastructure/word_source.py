@@ -44,7 +44,3 @@ class LocalWordSource(WordSource):
 
         word = random.choice(words)  # ruff:ignore[suspicious-non-cryptographic-random-usage] - not cryptographic, just word selection
         return {"word": word, "level": level}
-
-    def get_available_levels(self) -> list[str]:
-        """Get list of available CEFR levels from the word list."""
-        return sorted(self.words.keys())

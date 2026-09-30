@@ -33,11 +33,9 @@ class LinuxTray:
     _status_icon: Gtk.StatusIcon | None
     _gtk_menu: Gtk.Menu | None
     _pause_item: Gtk.MenuItem | None
-    _callbacks: dict
 
     def setup(self, callbacks):
         tray_icon_path = os.path.join(ICONS_DIR, "tray_text.svg")
-        self._callbacks = callbacks
         menu = self._create_gtk_menu(callbacks)
 
         if _has_appindicator:

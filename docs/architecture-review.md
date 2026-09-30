@@ -43,6 +43,27 @@ of these principles.
 
 ## Compatibility and verification
 
+The 2026-09-30 review found two boundary leaks introduced by the browser
+workflow. Undo now passes a typed `WordSnapshot` containing domain entities;
+table names and ORM conversion stay inside the repository. Translation previews
+go through `WordManagementService.translate_preview`, which validates the phrase
+and selects the configured provider. The window no longer reaches into the
+translation adapter. Service contracts include undo, preview, and the explicit
+WOTD language arguments.
+
+Architecture tests resolve relative imports as well as absolute imports and
+check that windows do not access database sessions, word repositories, or
+translation adapters directly. SQLite regression tests check that undo restores
+all translations, history, statistics, and hidden dates, including after a
+filtered query, and refuses conflicting records.
+
+Cleanup removed unused CRUD and statistics methods, the scheduler's old
+one-hour pause toggle and unread current-word cache, and unused domain
+re-exports. The CLI still reads the current phrase through its file adapter;
+the GUI uses the scheduler's persisted `pause_until` operation. Tests exercise
+the current undo and review paths. The unused `pytest-mock` dependency was
+removed, and CI collects coverage during its single core test run.
+
 Internal imports changed: service creation now comes from `bootstrap`, phrase
 state from `infrastructure.current_phrase`, and JSON configuration helpers from
 `infrastructure.config_file`. All repository call sites and tests were updated.

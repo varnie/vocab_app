@@ -133,14 +133,6 @@ class TestLocalWordSource:
         assert result is not None
         assert result["level"] == "A1"
 
-    @patch("infrastructure.word_source.LocalWordSource._load_words")
-    def test_get_available_levels(self, mock_load):
-        """Test that get_available_levels returns sorted keys."""
-        mock_load.return_value = {"B2": [], "A1": [], "C1": []}
-        source = LocalWordSource()
-        levels = source.get_available_levels()
-        assert levels == ["A1", "B2", "C1"]
-
     def test_load_words_file_not_found(self):
         """Test that _load_words returns empty dict when file not found."""
         with patch("infrastructure.word_source.os.path.join", return_value="/nonexistent/ENGLISH_CERF_WORDS.csv"):

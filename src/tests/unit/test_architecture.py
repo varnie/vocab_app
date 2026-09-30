@@ -2,6 +2,7 @@
 
 import ast
 import sys
+from importlib.util import resolve_name
 from pathlib import Path
 
 import pytest
@@ -22,12 +23,27 @@ def test_core_imports_only_inner_layers_and_standard_library(path):
     for node in ast.walk(ast.parse(path.read_text())):
         if isinstance(node, ast.Import):
             modules = [alias.name for alias in node.names]
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            modules = [node.module]
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if node.level:
+                package = ".".join(path.relative_to(SRC).parent.parts)
+                module = resolve_name("." * node.level + module, package)
+            modules = [module]
         else:
             continue
         for module in modules:
             assert module.split(".")[0] in allowed, f"{path.name} depends on outer module {module}"
+
+
+@pytest.mark.parametrize("path", sorted((SRC / "windows").glob("*.py")), ids=lambda p: p.name)
+def test_windows_do_not_access_persistence_or_translation_adapters(path):
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.ImportFrom):
+            assert not (node.module or "").startswith(("repositories", "infrastructure.models", "sqlalchemy"))
+        elif isinstance(node, ast.Import):
+            assert all(not alias.name.startswith(("repositories", "sqlalchemy")) for alias in node.names)
+        elif isinstance(node, ast.Attribute):
+            assert node.attr not in {"word_repo", "translation_service", "session", "_db"}
 
 
 def test_factory_shares_settings_and_accepts_alternate_adapters(vocab_service):

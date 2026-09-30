@@ -1,12 +1,9 @@
 """Mappers for converting between ORM models and domain entities."""
 
-from typing import Any
-
 from domain.entities import (
     History,
     Language,
     Setting,
-    Stats,
     Translation,
     Word,
     WordStats,
@@ -117,15 +114,4 @@ def map_setting(orm: ORMSetting) -> Setting:
     return Setting(
         key=orm.key,
         value=orm.value,
-    )
-
-
-def map_stats(data: dict[str, Any]) -> Stats:
-    """Map dict to Stats domain entity."""
-    return Stats(
-        total_words=data.get("total_words", 0),
-        today_words=data.get("today_words", 0),
-        today_reviews=data.get("today_reviews", 0),
-        total_reviews=data.get("total_reviews", 0),
-        streak=data.get("streak", 0),
     )

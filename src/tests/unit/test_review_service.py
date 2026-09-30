@@ -17,12 +17,6 @@ class TestReviewService:
 
         review_service.review_word(word.id)
 
-    def test_skip_word(self, word_service, review_service):
-        """Test that skip records the review."""
-        word = word_service.add_word("skipme", translation="пропустить")
-
-        review_service.skip_word(word.id)
-
     def test_get_stats_returns_dict(self, review_service):
         """Test getting statistics."""
         stats = review_service.get_stats()
