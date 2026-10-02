@@ -61,7 +61,7 @@ This will create a virtual environment and install all dependencies:
 
 #### Platform-specific dependencies
 
-**Linux (apt):** `python3-gi`, `python3-gi-cairo`, `gir1.2-gtk-3.0`, `gir1.2-appindicator3-0.1`
+**Linux (apt):** `python3-gi`, `python3-gi-cairo`, `gir1.2-gtk-3.0`, `librsvg2-common`, `gir1.2-appindicator3-0.1`
 
 **Linux (pacman):** `python-gobject`, `gtk3`, `libappindicator-gtk3`
 

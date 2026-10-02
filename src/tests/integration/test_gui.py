@@ -409,14 +409,24 @@ def test_settings_database_error_is_visible_and_does_not_change_autostart(gui, m
     assert not autostart
 
 
-def test_application_startup_settings_and_shutdown(tmp_path, monkeypatch):
+@pytest.mark.parametrize("icon_unavailable", [False, True])
+def test_application_startup_settings_and_shutdown(tmp_path, monkeypatch, icon_unavailable):
     from unittest.mock import MagicMock
 
+    import gi
+    gi.require_version("Gtk", "3.0")
     from gi.repository import Gio, GLib, Gtk
 
     import vocab_gui
     from infrastructure.config_file import write_config
 
+    fallback_icon = MagicMock(wraps=Gtk.Window.set_default_icon_name)
+    monkeypatch.setattr(Gtk.Window, "set_default_icon_name", fallback_icon)
+    if icon_unavailable:
+        def fail_icon(_path):
+            raise GLib.Error("SVG loader unavailable")
+
+        monkeypatch.setattr(Gtk.Window, "set_default_icon_from_file", fail_icon)
     config_file = str(tmp_path / "config.json")
     assert write_config(config_file, {"data_dir": str(tmp_path / "library")})
     tray = MagicMock()
@@ -476,6 +486,10 @@ def test_application_startup_settings_and_shutdown(tmp_path, monkeypatch):
     assert not app.scheduler._wotd_thread.is_alive()
     assert not app.vocab_service._db._connected
     tray.setup.assert_called_once()
+    if icon_unavailable:
+        fallback_icon.assert_called_once_with("accessories-dictionary")
+    else:
+        fallback_icon.assert_not_called()
 
 
 @pytest.mark.skipif(os.environ.get("UPDATE_SCREENSHOTS") != "1", reason="explicit documentation update")

@@ -64,12 +64,12 @@ class StatsWindow(BaseWindow):
         """Make a stat row."""
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
-        lbl = Gtk.Label(label)
+        lbl = Gtk.Label(label=label)
         lbl.set_xalign(0)
         lbl.set_hexpand(True)
         box.pack_start(lbl, True, True, 0)
 
-        val = Gtk.Label(value)
+        val = Gtk.Label(label=value)
         val.set_xalign(1)
         box.pack_start(val, False, False, 0)
 

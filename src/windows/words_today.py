@@ -29,7 +29,7 @@ class WordsTodayWindow(BaseWindow):
         vbox = padded_box(spacing=12, margin=16)
         self.add(vbox)
 
-        self.wotd_label = Gtk.Label("")
+        self.wotd_label = Gtk.Label(label="")
         self.wotd_label.set_xalign(0)
         self.wotd_label.set_line_wrap(True)
         self.wotd_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)

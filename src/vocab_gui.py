@@ -55,7 +55,11 @@ class VocabApp(Gtk.Application):
 
     def do_startup(self):
         Gtk.Application.do_startup(self)
-        Gtk.Window.set_default_icon_from_file(os.path.join(ICONS_DIR, "translate.svg"))
+        try:
+            Gtk.Window.set_default_icon_from_file(os.path.join(ICONS_DIR, "translate.svg"))
+        except GLib.Error as error:
+            logger.warning("Could not load application icon: %s", error)
+            Gtk.Window.set_default_icon_name("accessories-dictionary")
 
         # Keep app running even without windows (tray app)
         Gio.Application.hold(self)
@@ -231,7 +235,8 @@ class VocabApp(Gtk.Application):
         """Quit application."""
         if self.scheduler:
             self.scheduler.stop()
-        self.vocab_service.close()
+        if self.vocab_service:
+            self.vocab_service.close()
         self.quit()
 
 

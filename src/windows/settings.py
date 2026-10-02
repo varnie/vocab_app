@@ -77,7 +77,7 @@ class SettingsWindow(BaseWindow):
         main_box.pack_end(footer, False, False, 0)
 
         # Version footer
-        footer_label = Gtk.Label(f"App version: {get_version()}")
+        footer_label = Gtk.Label(label=f"App version: {get_version()}")
         footer_label.set_xalign(0)
         footer_label.set_margin_top(10)
         footer_label.set_selectable(True)
@@ -162,7 +162,7 @@ class SettingsWindow(BaseWindow):
         self.test_spinner.hide()
         test_btn_box.pack_start(self.test_spinner, False, False, 0)
 
-        self.test_status_label = Gtk.Label("")
+        self.test_status_label = Gtk.Label(label="")
         self.test_status_label.set_xalign(0)
         self.test_status_label.set_line_wrap(True)
         self.test_status_label.hide()
@@ -188,7 +188,7 @@ class SettingsWindow(BaseWindow):
                 "(Usually Settings → Keyboard → Shortcuts)\n\n"
                 "Commands:"
             )
-        info_label = Gtk.Label(shortcut_info)
+        info_label = Gtk.Label(label=shortcut_info)
         info_label.set_xalign(0)
         info_label.set_line_wrap(True)
         shortcuts_box.pack_start(info_label, False, False, 0)
@@ -198,7 +198,7 @@ class SettingsWindow(BaseWindow):
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vocab_cli.py"
         )
         cmds_label = Gtk.Label(
-            f"Save selected:   python3 {cli_path} --save\n"
+            label=f"Save selected:   python3 {cli_path} --save\n"
             f"Delete current: python3 {cli_path} --delete\n"
             f"Show next:      python3 {cli_path} --next"
         )
@@ -221,14 +221,14 @@ class SettingsWindow(BaseWindow):
         """Build the data directory section."""
         data_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
-        hint_label = Gtk.Label(f"Leave empty to use default: {DEFAULT_DATA_DIR}")
+        hint_label = Gtk.Label(label=f"Leave empty to use default: {DEFAULT_DATA_DIR}")
         hint_label.set_xalign(0)
         hint_label.set_line_wrap(True)
         data_box.pack_start(hint_label, False, False, 0)
 
         # Custom data directory (read from config file)
         dir_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        dir_box.pack_start(Gtk.Label("Custom Path:"), False, False, 0)
+        dir_box.pack_start(Gtk.Label(label="Custom Path:"), False, False, 0)
 
         # Read from config file if available (JSON)
         config = read_config(self.config_file) if self.config_file else {}
@@ -251,7 +251,7 @@ class SettingsWindow(BaseWindow):
         wotd_box.pack_start(self.wotd_check, False, False, 0)
 
         level_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        level_box.pack_start(Gtk.Label("Level:"), False, False, 0)
+        level_box.pack_start(Gtk.Label(label="Level:"), False, False, 0)
         self.wotd_level_combo = Gtk.ComboBoxText()
         for level in CEFR_LEVELS:
             self.wotd_level_combo.append(level, level)

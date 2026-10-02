@@ -35,6 +35,7 @@ elif command -v apt &>/dev/null; then
         python3-gi \
         python3-gi-cairo \
         gir1.2-gtk-3.0 \
+        librsvg2-common \
         gir1.2-appindicator3-0.1
 
 else

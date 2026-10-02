@@ -55,13 +55,13 @@ class AddWordDialog(BaseWindow):
         )
 
         # Word entry with source language label
-        box.pack_start(Gtk.Label(f"{source_lang_name} ({source_lang_abbrev}):"), False, False, 0)
+        box.pack_start(Gtk.Label(label=f"{source_lang_name} ({source_lang_abbrev}):"), False, False, 0)
         self.word_entry = Gtk.Entry()
         self.word_entry.set_placeholder_text("Enter word or phrase")
         box.pack_start(self.word_entry, False, False, 0)
 
         # Translation entry with target language label
-        box.pack_start(Gtk.Label(f"{target_lang_name} ({target_lang_abbrev}):"), False, False, 0)
+        box.pack_start(Gtk.Label(label=f"{target_lang_name} ({target_lang_abbrev}):"), False, False, 0)
         self.translation_entry = Gtk.Entry()
         self.translation_entry.set_placeholder_text("Leave empty to auto-translate")
         box.pack_start(self.translation_entry, False, False, 0)
