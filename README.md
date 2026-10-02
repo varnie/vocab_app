@@ -16,7 +16,7 @@ A lightweight vocabulary learning app with system tray and spaced repetition. Su
 - **Autostart**: Automatically starts on login
 - **Multiple languages**: Support for 9 target languages
 - **Custom data directory**: Store database anywhere (e.g., Dropbox for sync)
-- **Quiet hours and snooze**: Pause automatic notifications until a chosen time, set quiet hours, or hide a word for seven days
+- **Quiet hours and snooze**: Pause/resume automatic notifications, set quiet hours, or hide a word for seven days
 - **Responsive editing**: Background translation, preserved spelling, language-specific editing, and undo for the last deleted translation
 - **Cross-platform**: Works on Linux and macOS
 
@@ -132,8 +132,8 @@ Configure via System Settings → Keyboard → Shortcuts → Services, or use to
 - CSV export includes every translation by default, with an option for the current
   target language. Untranslated words are retained as rows with an empty target.
 - **Test API** checks only the selected provider; normal translation still uses fallback.
-- **Pause / Resume…** chooses the next occurrence of a local time (within 24 hours).
-  The pause survives restarts. Resume clears this pause; quiet hours still apply.
+- **Pause** immediately pauses automatic notifications until you click **Resume**.
+  No dialog is opened. The pause survives restarts; quiet hours still apply after resuming.
 - Enter submits the add/edit dialog; Escape closes windows;
   Ctrl+F focuses browser search. Statistics and today's list refresh on reopening
   and after GUI library changes. Their day boundary follows the local timezone.

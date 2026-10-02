@@ -12,7 +12,7 @@ from application.service_interfaces import (
     AbstractSettingsService,
     AbstractWOTDService,
 )
-from config import PAUSED_UNTIL_KEY
+from config import PAUSED_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +48,7 @@ class ReviewScheduler:
         self._update_label = label_callback
         self._cleanup_session = cleanup_callback or (lambda: None)
         self._notification_service = notification_service
-        self.paused_until = 0.0
-        try:
-            stored_pause = self.settings_service.get_setting(PAUSED_UNTIL_KEY, "0")
-            self.paused_until = float(stored_pause) if isinstance(stored_pause, str) else 0.0
-        except ValueError:
-            pass
+        self.paused = self.settings_service.get_setting(PAUSED_KEY, "false") == "true"
         self.running = False
         self._state = threading.Condition()
         self._generation = 0
@@ -102,15 +97,15 @@ class ReviewScheduler:
             )
             return not interrupted
 
-    def pause_until(self, timestamp: float) -> None:
-        self.settings_service.set_setting(PAUSED_UNTIL_KEY, str(timestamp))
+    def set_paused(self, paused: bool) -> None:
+        self.settings_service.set_setting(PAUSED_KEY, "true" if paused else "false")
         with self._state:
-            self.paused_until = timestamp
+            self.paused = paused
             self.settings_changed()
 
     def notifications_paused(self) -> bool:
         with self._state:
-            paused = self.paused_until > time.time()
+            paused = self.paused
         return paused or self.settings_service.is_quiet_time() is True
 
     def on_show_next(self):

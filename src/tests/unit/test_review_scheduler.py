@@ -140,7 +140,7 @@ def test_change_during_selection_discards_stale_word(scheduler):
 
 
 def test_manual_show_still_works_during_pause(scheduler):
-    scheduler.pause_until(time.time() + 3600)
+    scheduler.set_paused(True)
     assert scheduler.on_show_next().phrase == "Hello"
     scheduler._notify.assert_called_once()
 
@@ -148,8 +148,8 @@ def test_manual_show_still_works_during_pause(scheduler):
 def test_failed_pause_save_does_not_change_scheduler(scheduler):
     scheduler.settings_service.set_setting.side_effect = RuntimeError("cannot save")
     with pytest.raises(RuntimeError, match="cannot save"):
-        scheduler.pause_until(time.time() + 3600)
-    assert scheduler.paused_until == 0
+        scheduler.set_paused(True)
+    assert not scheduler.paused
     assert scheduler._generation == 0
 
 

@@ -425,6 +425,16 @@ def test_application_startup_settings_and_shutdown(tmp_path, monkeypatch):
     def exercise():
         try:
             assert app.scheduler.running
+            windows_before = set(Gtk.Window.list_toplevels())
+            app.on_pause()
+            assert app.scheduler.paused
+            assert app.scheduler.notifications_paused()
+            tray.set_pause_label.assert_called_with("Resume")
+            assert set(Gtk.Window.list_toplevels()) == windows_before
+            app.on_pause()
+            assert not app.scheduler.paused
+            tray.set_pause_label.assert_called_with("Pause")
+            assert set(Gtk.Window.list_toplevels()) == windows_before
             app.vocab_service.word_service.add_word("Hello", "bonjour", target_lang="fr")
             app.on_word_browser()
             app.on_settings()

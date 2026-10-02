@@ -11,7 +11,7 @@ DATA_DIR_KEY = "data_dir"
 GNOME_TRAY_WARNING_KEY = "gnome_tray_warning_shown"
 QUIET_START_KEY = "quiet_start"
 QUIET_END_KEY = "quiet_end"
-PAUSED_UNTIL_KEY = "paused_until"
+PAUSED_KEY = "paused"
 
 # Default setting values.
 DEFAULT_REVIEW_INTERVAL = "3600"

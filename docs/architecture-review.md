@@ -60,7 +60,7 @@ filtered query, and refuses conflicting records.
 Cleanup removed unused CRUD and statistics methods, the scheduler's old
 one-hour pause toggle and unread current-word cache, and unused domain
 re-exports. The CLI still reads the current phrase through its file adapter;
-the GUI uses the scheduler's persisted `pause_until` operation. Tests exercise
+the GUI uses the scheduler's persisted pause/resume toggle. Tests exercise
 the current undo and review paths. The unused `pytest-mock` dependency was
 removed, and CI collects coverage during its single core test run.
 

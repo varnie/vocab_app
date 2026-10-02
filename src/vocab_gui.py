@@ -4,7 +4,7 @@
 import logging
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import gi
 
@@ -103,6 +103,7 @@ class VocabApp(Gtk.Application):
             cleanup_callback=self.vocab_service.remove_session,
             notification_service=self.vocab_service.notification_service,
         )
+        self.tray.set_pause_label("Resume" if self.scheduler.paused else "Pause")
         self.scheduler.start()
 
         if IS_LINUX:
@@ -211,36 +212,8 @@ class VocabApp(Gtk.Application):
 
     def on_pause(self, widget=None) -> None:
         """Toggle pause/resume reviews."""
-        dialog = Gtk.Dialog(title="Pause notifications", flags=Gtk.DialogFlags.MODAL)
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Resume", Gtk.ResponseType.NO)
-        dialog.add_button("Pause", Gtk.ResponseType.OK)
-        entry = Gtk.Entry()
-        entry.set_text((datetime.now() + timedelta(hours=1)).strftime("%H:%M"))
-        box = dialog.get_content_area()
-        box.pack_start(Gtk.Label(label="Pause until (local time, HH:MM; next occurrence):"), False, False, 10)
-        box.pack_start(entry, False, False, 10)
-        error = Gtk.Label()
-        box.pack_start(error, False, False, 0)
-        dialog.show_all()
-        while True:
-            response = dialog.run()
-            if response == Gtk.ResponseType.NO:
-                self.scheduler.pause_until(0)
-            elif response == Gtk.ResponseType.OK:
-                try:
-                    until = datetime.strptime(entry.get_text().strip(), "%H:%M").time()
-                except ValueError:
-                    error.set_text("Use HH:MM, for example 18:30.")
-                    continue
-                now = datetime.now()
-                timestamp = datetime.combine(now.date(), until)
-                if timestamp <= now:
-                    timestamp += timedelta(days=1)
-                self.scheduler.pause_until(timestamp.timestamp())
-            break
-        self.tray.set_pause_label("Pause / Resume…")
-        dialog.destroy()
+        self.scheduler.set_paused(not self.scheduler.paused)
+        self.tray.set_pause_label("Resume" if self.scheduler.paused else "Pause")
 
     def on_settings(self, widget=None) -> None:
         """Show settings window."""

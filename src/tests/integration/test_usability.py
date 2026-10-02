@@ -187,9 +187,17 @@ def test_quiet_hours_and_pause_cover_wotd(settings_service):
         scheduler.wotd_service.get_word_of_the_day.assert_not_called()
     settings_service.set_setting("quiet_start", "")
     settings_service.set_setting("quiet_end", "")
-    scheduler.pause_until(time.time() + 3600)
+    scheduler.set_paused(True)
     scheduler._check_wotd()
     scheduler.wotd_service.get_word_of_the_day.assert_not_called()
+    restored = ReviewScheduler(
+        MagicMock(), MagicMock(), settings_service, MagicMock(), MagicMock(),
+        MagicMock(), MagicMock(),
+    )
+    assert restored.paused
+    restored.set_paused(False)
+    assert not restored.notifications_paused()
+    assert settings_service.get_setting("paused") == "false"
 
 
 def test_scheduler_records_exposure_and_releases_real_sqlite_session(library, monkeypatch):
