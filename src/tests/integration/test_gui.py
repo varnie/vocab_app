@@ -21,14 +21,23 @@ def gui(tmp_path):
     assert Gtk.init_check()[0]
     service = create_vocab_service(db_path=str(tmp_path / "gui.db"))
     yield Gtk, service
-    for window in Gtk.Window.list_toplevels():
-        window.destroy()
+    close_test_windows(Gtk)
     service.close()
 
 
 def drain(gtk):
     while gtk.events_pending():
         gtk.main_iteration_do(False)
+
+
+def close_test_windows(gtk):
+    """Destroy application windows, leaving GTK-owned tooltip windows intact."""
+    from windows import BaseWindow
+
+    for window in gtk.Window.list_toplevels():
+        if isinstance(window, (BaseWindow, gtk.Dialog)):
+            window.destroy()
+    drain(gtk)
 
 
 def test_browser_empty_sort_language_and_undo(gui, monkeypatch):
@@ -450,8 +459,7 @@ def test_application_startup_settings_and_shutdown(tmp_path, monkeypatch):
         except Exception as exc:
             errors.append(exc)
         finally:
-            for window in Gtk.Window.list_toplevels():
-                window.destroy()
+            close_test_windows(Gtk)
             app.on_quit()
         return False
 

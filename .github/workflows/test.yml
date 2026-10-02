@@ -17,6 +17,7 @@ jobs:
         run: xvfb-run -a .gtk-venv/bin/python -m pytest -q src/tests/integration/test_gui.py
         env:
           RUN_GTK_TESTS: '1'
+          G_DEBUG: fatal-criticals
   test:
     runs-on: ubuntu-latest
     
