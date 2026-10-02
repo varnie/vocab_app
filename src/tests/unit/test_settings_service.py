@@ -1,5 +1,10 @@
 """Unit tests for SettingsService."""
 
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 
 class TestSettingsService:
     """Tests for SettingsService."""
@@ -79,3 +84,23 @@ class TestSettingsService:
         settings_service.initialize_defaults()
         assert settings_service.get_target_lang() == "es"
         assert settings_service.get_setting("review_interval") == "3600"
+
+
+@pytest.mark.parametrize("start,end,hour,minute,expected", [
+    ("09:00", "18:00", 9, 0, True),
+    ("09:00", "18:00", 18, 0, False),
+    ("22:00", "08:00", 22, 0, True),
+    ("22:00", "08:00", 7, 59, True),
+    ("22:00", "08:00", 8, 0, False),
+    ("22:00", "08:00", 12, 0, False),
+    ("08:00", "08:00", 8, 0, False),
+    ("", "", 12, 0, False),
+    ("22:00", "", 23, 0, False),
+    ("invalid", "08:00", 23, 0, False),
+])
+def test_quiet_hours_boundaries(settings_service, start, end, hour, minute, expected):
+    settings_service.save_settings({"quiet_start": start, "quiet_end": end})
+    clock = MagicMock(wraps=datetime)
+    clock.now.return_value = datetime(2026, 10, 2, hour, minute)
+    with patch("application.settings_service.datetime", clock):
+        assert settings_service.is_quiet_time() is expected

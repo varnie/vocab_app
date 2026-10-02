@@ -3,8 +3,14 @@
 import logging
 import os
 
-from application.factory import ServiceFactory
+from application.export_service import ExportService
+from application.notification_service import NotificationService
+from application.review_service import ReviewService
+from application.settings_service import SettingsService
+from application.translation_test_service import TranslationTestService
 from application.vocab_service import VocabService
+from application.word_service import WordManagementService
+from application.wotd_service import WOTDService
 from constants import CONFIG_FILE
 from infrastructure.csv_export import write_vocabulary_csv
 from infrastructure.current_phrase import write_current_phrase
@@ -52,21 +58,19 @@ def create_vocab_service(
     wotd_repo = WOTDRepository(db)
     translation_service = TranslationServiceImpl()
 
-    factory = ServiceFactory(
-        word_repo=word_repo,
-        stats_repo=stats_repo,
-        settings_repo=settings_repo,
-        language_repo=language_repo,
-        wotd_repo=wotd_repo,
-        translation_service=translation_service,
-        word_source=LocalWordSource(),
-        write_phrase=write_current_phrase,
-        write_csv=write_vocabulary_csv,
-    )
-
-    factory.settings_service.initialize_defaults()
+    settings = SettingsService(settings_repo)
+    settings.initialize_defaults()
+    words = WordManagementService(word_repo, language_repo, settings, translation_service)
+    reviews = ReviewService(word_repo, stats_repo, settings)
 
     return VocabService(
-        db=db,
-        factory=factory,
+        _db=db,
+        language_repo=language_repo,
+        word_service=words,
+        review_service=reviews,
+        settings_service=settings,
+        export_service=ExportService(word_repo, settings, write_vocabulary_csv),
+        wotd_service=WOTDService(settings, wotd_repo, words, translation_service, LocalWordSource()),
+        notification_service=NotificationService(reviews, words, write_current_phrase),
+        translation_test_service=TranslationTestService(translation_service),
     )

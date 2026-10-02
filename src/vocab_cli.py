@@ -35,11 +35,11 @@ def run_cli():
                     send_notification("No text selected")
                     return False
                 phrase = result.strip()
-                word = vocab_service.add_word(phrase, auto_translate=True)
+                word = vocab_service.word_service.add_word(phrase, auto_translate=True)
 
-                translation, trans_lang = vocab_service.get_translation_with_lang(word.id)
+                translation, trans_lang = vocab_service.word_service.get_translation_with_lang(word.id)
                 if translation:
-                    abbrev = vocab_service.get_language_abbreviation(trans_lang) if trans_lang else "—"
+                    abbrev = vocab_service.word_service.get_language_abbreviation(trans_lang) if trans_lang else "—"
                     send_notification(f"<b>{phrase[:20]}</b> → {translation} [{abbrev}]")
                 else:
                     send_notification(f"Word saved: {phrase[:30]}")
@@ -53,16 +53,16 @@ def run_cli():
         if args.delete:
             phrase = read_current_phrase()
             if phrase:
-                vocab_service.delete_word(phrase)
+                vocab_service.word_service.delete_word(phrase)
                 send_notification(f"Word deleted: {phrase[:30]}")
                 clear_current_phrase()
 
         if args.next:
-            body = vocab_service.get_next_word_notification()
+            body = vocab_service.notification_service.get_next_word_notification()
             if body:
                 send_notification(body)
             else:
-                timestamp = vocab_service.next_available_at()
+                timestamp = vocab_service.review_service.next_available_at()
                 if isinstance(timestamp, (int, float)):
                     when = datetime.fromtimestamp(timestamp).strftime("%d %b, %H:%M")
                     send_notification(f"No words due yet. Next eligible word: {when}.")

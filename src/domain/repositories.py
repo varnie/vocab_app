@@ -30,14 +30,10 @@ class AbstractWordRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def add(self, phrase: str) -> Word:
-        """Add a word, return domain entity."""
-        pass
+    def add(self, phrase: str) -> Word: ...
 
     @abstractmethod
-    def get_by_phrase(self, phrase: str) -> Word | None:
-        """Get word by phrase."""
-        pass
+    def get_by_phrase(self, phrase: str) -> Word | None: ...
 
     @abstractmethod
     def get_all(
@@ -51,9 +47,7 @@ class AbstractWordRepository(ABC):
         descending: bool = False,
         untranslated: bool = False,
         hidden_only: bool = False,
-    ) -> list[Word]:
-        """Get all words with stats."""
-        pass
+    ) -> list[Word]: ...
 
     @abstractmethod
     def get_for_review(self, limit: int = 20, target_lang: str | None = None) -> list[Word]:
@@ -61,26 +55,18 @@ class AbstractWordRepository(ABC):
         pass
 
     @abstractmethod
-    def delete(self, phrase: str) -> None:
-        """Delete a word."""
-        pass
+    def delete(self, phrase: str) -> None: ...
 
     @abstractmethod
-    def add_translation(self, word_id: int, translation: str, target_lang: str = "ru") -> None:
-        """Add translation for a word."""
-        pass
+    def add_translation(self, word_id: int, translation: str, target_lang: str = "ru") -> None: ...
 
     @abstractmethod
-    def get_translation(self, word_id: int, target_lang: str = "ru") -> Translation | None:
-        """Get translation for a word."""
-        pass
+    def get_translation(self, word_id: int, target_lang: str = "ru") -> Translation | None: ...
 
     @abstractmethod
     def update_word(
         self, word_id: int, phrase: str, translation: str | None = None, target_lang: str = "ru"
-    ) -> None:
-        """Update word phrase."""
-        pass
+    ) -> None: ...
 
     def snooze_word(self, word_id: int, until: int) -> None:
         raise NotImplementedError
@@ -89,9 +75,7 @@ class AbstractWordRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def delete_translation(self, word_id: int, target_lang: str) -> None:
-        """Delete translation for a specific language."""
-        pass
+    def delete_translation(self, word_id: int, target_lang: str) -> None: ...
 
 
 class AbstractStatsRepository(ABC):
@@ -103,32 +87,27 @@ class AbstractStatsRepository(ABC):
         pass
 
     @abstractmethod
-    def get_stats(self) -> Stats:
-        """Get overall statistics."""
-        pass
+    def get_stats(self) -> Stats: ...
 
     @abstractmethod
-    def get_language_counts(self) -> dict:
-        """Get word count per language."""
-        pass
+    def get_language_counts(self) -> dict: ...
 
 
 class AbstractSettingsRepository(ABC):
     """Abstract interface for settings operations."""
 
     @abstractmethod
-    def get(self, key: str) -> Setting | None:
-        """Get a setting value, or None if not stored."""
-        pass
+    def get(self, key: str) -> Setting | None: ...
 
     @abstractmethod
-    def get_all(self) -> dict[str, str]:
-        """Get all settings as a flat dict."""
-        pass
+    def get_all(self) -> dict[str, str]: ...
 
     @abstractmethod
-    def set(self, key: str, value: str) -> None:
-        """Set a setting value."""
+    def set(self, key: str, value: str) -> None: ...
+
+    @abstractmethod
+    def set_many(self, values: dict[str, str]) -> None:
+        """Save all values in one transaction, rolling back on failure."""
         pass
 
 
@@ -136,30 +115,20 @@ class AbstractLanguageRepository(ABC):
     """Abstract interface for language operations."""
 
     @abstractmethod
-    def get_by_code(self, code: str) -> Language | None:
-        """Get language by code."""
-        pass
+    def get_by_code(self, code: str) -> Language | None: ...
 
     @abstractmethod
-    def get_all(self) -> list[Language]:
-        """Get all languages."""
-        pass
+    def get_all(self) -> list[Language]: ...
 
     @abstractmethod
-    def init_defaults(self) -> None:
-        """Initialize languages table with default data."""
-        pass
+    def init_defaults(self) -> None: ...
 
 
 class AbstractWOTDRepository(ABC):
     """Abstract interface for Word of the Day operations."""
 
     @abstractmethod
-    def mark_shown(self, word: str, level: str) -> None:
-        """Record a word as shown for today."""
-        pass
+    def mark_shown(self, word: str, level: str) -> None: ...
 
     @abstractmethod
-    def get_today(self) -> WOTDHistory | None:
-        """Get today's WOTD if shown, or None."""
-        pass
+    def get_today(self) -> WOTDHistory | None: ...

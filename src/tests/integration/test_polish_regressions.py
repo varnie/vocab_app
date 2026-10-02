@@ -42,29 +42,29 @@ def rows(service):
 
 
 def test_whole_word_undo_restores_every_row_after_filtered_query(library):
-    word = library.add_word("Hello", "bonjour", target_lang="fr")
-    library.add_word("Hello", "Hallo", target_lang="de")
-    library.review_word(word.id)
-    library.review_word(word.id)
-    library.snooze_word(word.id, int(time.time()) + 86400)
+    word = library.word_service.add_word("Hello", "bonjour", target_lang="fr")
+    library.word_service.add_word("Hello", "Hallo", target_lang="de")
+    library.review_service.review_word(word.id)
+    library.review_service.review_word(word.id)
+    library.word_service.snooze_word(word.id, int(time.time()) + 86400)
     before = rows(library)
-    assert library.get_words(target_lang="ru", untranslated=True)[0].translation == ""
-    snapshot = library.delete_word_with_undo(word.id)
+    assert library.word_service.get_words(target_lang="ru", untranslated=True)[0].translation == ""
+    snapshot = library.word_service.delete_word_with_undo(word.id)
     assert isinstance(snapshot, WordSnapshot)
     assert snapshot.word.phrase == "Hello"
     assert len(snapshot.translations) == 2
     assert all(not values for values in rows(library).values())
-    library.restore_word(snapshot)
+    library.word_service.restore_word(snapshot)
     assert rows(library) == before
 
 
 def test_undo_conflict_preserves_new_data_and_rolls_back(library):
-    word = library.add_word("First", "one")
-    snapshot = library.delete_word_with_undo(word.id)
-    library.add_word("Second", "two")
+    word = library.word_service.add_word("First", "one")
+    snapshot = library.word_service.delete_word_with_undo(word.id)
+    library.word_service.add_word("Second", "two")
     before = rows(library)
     with pytest.raises(ValueError, match=r"newer data|cannot safely"):
-        library.restore_word(snapshot)
+        library.word_service.restore_word(snapshot)
     assert rows(library) == before
 
 
@@ -75,44 +75,44 @@ def test_failed_translation_insert_does_not_leave_a_word(library):
     ))
     library._db.commit()
     with pytest.raises(Exception, match="insert rejected"):
-        library.add_word("Incomplete", "translation")
+        library.word_service.add_word("Incomplete", "translation")
     assert library.word_service.word_repo.get_by_phrase("Incomplete") is None
     assert not rows(library)["translations"]
     # A failure must not poison the session or remove a pre-existing phrase.
-    word = library.add_word("Existing")
+    word = library.word_service.add_word("Existing")
     with pytest.raises(Exception, match="insert rejected"):
-        library.add_word("Existing", "translation")
+        library.word_service.add_word("Existing", "translation")
     assert library.word_service.word_repo.get_by_phrase("Existing").id == word.id
 
 
 def test_export_all_languages_and_untranslated(library, tmp_path):
-    library.add_word("Hello", "привет", target_lang="ru")
-    library.add_word("Hello", "bonjour", target_lang="fr")
-    library.add_word("Untranslated")
+    library.word_service.add_word("Hello", "привет", target_lang="ru")
+    library.word_service.add_word("Hello", "bonjour", target_lang="fr")
+    library.word_service.add_word("Untranslated")
     # Simulate a browser loading only a subset into the same SQLAlchemy session.
-    library.get_words(target_lang="ru")
+    library.word_service.get_words(target_lang="ru")
     path = tmp_path / "words.csv"
-    library.export_csv(str(path))
+    library.export_service.export_csv(str(path))
     with path.open() as stream:
         exported = list(csv.DictReader(stream))
     assert {(row["source"], row["target"], row["target language"]) for row in exported} == {
         ("Hello", "привет", "ru"), ("Hello", "bonjour", "fr"), ("Untranslated", "", ""),
     }
-    library.export_csv(str(path), "fr")
+    library.export_service.export_csv(str(path), "fr")
     with path.open() as stream:
         assert [row["target"] for row in csv.DictReader(stream)] == ["bonjour", ""]
 
 
 def test_wotd_keeps_request_language(library, monkeypatch):
-    library.set_setting("wotd_enabled", "true")
+    library.settings_service.set_setting("wotd_enabled", "true")
     monkeypatch.setattr(library.wotd_service.word_source, "get_word", lambda _: {"word": "Apple", "level": "A1"})
 
     def translate(*_args):
-        library.set_setting("target_lang", "fr")
+        library.settings_service.set_setting("target_lang", "fr")
         return "яблоко"
 
     monkeypatch.setattr(library.wotd_service.translation_service, "translate", translate)
-    word = library.get_word_of_the_day()
+    word = library.wotd_service.get_word_of_the_day()
     assert word.language_code == "ru"
     assert library.word_service.word_repo.get_translation(word.id, "fr") is None
 
@@ -130,14 +130,14 @@ def test_provider_test_cannot_succeed_via_fallback(monkeypatch):
 
 
 def test_hidden_filter_and_resume_do_not_record_exposures(library):
-    word = library.add_word("Hidden", "translation")
-    library.add_word("Visible", "translation")
+    word = library.word_service.add_word("Hidden", "translation")
+    library.word_service.add_word("Visible", "translation")
     until = int(time.time()) + 86400
-    library.snooze_word(word.id, until)
-    result = library.get_words(target_lang="ru", hidden_only=True)
+    library.word_service.snooze_word(word.id, until)
+    result = library.word_service.get_words(target_lang="ru", hidden_only=True)
     assert [(item.id, item.hidden_until) for item in result] == [(word.id, until)]
-    library.snooze_word(word.id, 0)
-    assert library.get_words(hidden_only=True) == []
+    library.word_service.snooze_word(word.id, 0)
+    assert library.word_service.get_words(hidden_only=True) == []
     assert rows(library)["history"] == []
 
 
@@ -149,13 +149,13 @@ def test_relocation_waits_for_restart_and_includes_late_writes(tmp_path, choice)
     assert write_config(config, {"data_dir": str(original)})
     service = create_vocab_service(config)
     try:
-        service.add_word("Before", "до")
+        service.word_service.add_word("Before", "до")
         result = relocate_database(config, str(destination), lambda: choice)
         assert result.verdict is RelocationVerdict.SCHEDULED
         assert get_db_path(config) == str(original / "vocab.db")
         assert not destination.exists()
-        service.save_settings({"target_lang": "fr"})
-        service.add_word("After", "après")
+        service.settings_service.save_settings({"target_lang": "fr"})
+        service.word_service.add_word("After", "après")
     finally:
         service.close()
     apply_pending_relocation(config)
@@ -163,9 +163,9 @@ def test_relocation_waits_for_restart_and_includes_late_writes(tmp_path, choice)
     assert get_db_path(config) == str(destination / "vocab.db")
     service = create_vocab_service(config)
     try:
-        phrases = [word.phrase for word in service.get_words()]
+        phrases = [word.phrase for word in service.word_service.get_words()]
         assert phrases == (["After", "Before"] if choice is DataDirChoice.MOVE else [])
-        service.add_word("New location", "works")
+        service.word_service.add_word("New location", "works")
     finally:
         service.close()
 

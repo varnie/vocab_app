@@ -41,11 +41,7 @@ def map_word(orm: ORMWord) -> Word:
 
 def map_word_with_details(orm: ORMWord) -> Word:
     """Map ORM Word to domain entity with translation and stats."""
-    word = Word(
-        id=orm.id,
-        phrase=orm.phrase,
-        created_at=orm.created_at,
-    )
+    word = map_word(orm)
 
     if orm.translations:
         word.translation = orm.translations[0].translation

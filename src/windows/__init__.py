@@ -75,6 +75,23 @@ def padded_box(
     return box
 
 
+def pack_button(box: Gtk.Box, label: str, callback, *, expand=False, sensitive=True) -> Gtk.Button:
+    """Create and connect an action button in a horizontal box."""
+    button = Gtk.Button(label=label)
+    button.connect("clicked", callback)
+    button.set_sensitive(sensitive)
+    box.pack_start(button, expand, expand, 0)
+    return button
+
+
+def labelled_row(label: str, widget: Gtk.Widget) -> Gtk.Box:
+    """Place a label on the left and its control on the right."""
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    box.pack_start(Gtk.Label(label=label), False, False, 0)
+    box.pack_end(widget, False, False, 0)
+    return box
+
+
 def show_message(parent: Gtk.Window, kind: Gtk.MessageType, text: str) -> None:
     """Show a modal OK dialog."""
     dialog = Gtk.MessageDialog(
@@ -102,4 +119,4 @@ def ask_confirm(parent: Gtk.Window, text: str) -> bool:
     return response == Gtk.ResponseType.YES
 
 
-__all__ = ["BaseWindow", "ask_confirm", "padded_box", "set_margins", "show_message"]
+__all__ = ["BaseWindow", "ask_confirm", "labelled_row", "pack_button", "padded_box", "set_margins", "show_message"]

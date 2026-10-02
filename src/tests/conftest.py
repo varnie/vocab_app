@@ -98,30 +98,32 @@ def mock_translation_service():
 @pytest.fixture
 def vocab_service(
     test_db,
-    word_repo,
-    stats_repo,
-    settings_repo,
     language_repo,
     mock_translation_service,
+    word_service,
+    review_service,
+    settings_service,
+    export_service,
 ):
     """Create VocabService with all test dependencies."""
-    from application.factory import ServiceFactory
-
-    factory = ServiceFactory(
-        word_repo=word_repo,
-        stats_repo=stats_repo,
-        settings_repo=settings_repo,
-        language_repo=language_repo,
-        wotd_repo=MagicMock(),  # Mock - not used in tests
-        translation_service=mock_translation_service,
-        word_source=MagicMock(),
-        write_phrase=MagicMock(),
-        write_csv=write_vocabulary_csv,
-    )
-
+    from application.notification_service import NotificationService
+    from application.translation_test_service import TranslationTestService
     from application.vocab_service import VocabService
+    from application.wotd_service import WOTDService
 
-    return VocabService(db=test_db, factory=factory)
+    return VocabService(
+        _db=test_db,
+        language_repo=language_repo,
+        word_service=word_service,
+        review_service=review_service,
+        settings_service=settings_service,
+        export_service=export_service,
+        wotd_service=WOTDService(
+            settings_service, MagicMock(), word_service, mock_translation_service, MagicMock(),
+        ),
+        notification_service=NotificationService(review_service, word_service, MagicMock()),
+        translation_test_service=TranslationTestService(mock_translation_service),
+    )
 
 
 @pytest.fixture

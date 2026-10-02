@@ -9,12 +9,12 @@ of these principles.
 | Principle | Findings and resulting design |
 | --- | --- |
 | Single responsibility | Startup wiring was embedded in the application package; file relocation in the settings window; CSV encoding in the export use case. Wiring now lives in `bootstrap.py`; relocation and CSV output have independent adapters. GUI controls still own user interaction. |
-| Open/closed | Repository and translation-provider interfaces already support alternative implementations. The factory now also accepts a word source, phrase writer, and CSV writer instead of constructing concrete adapters. Adding an adapter only requires composition-root wiring. |
+| Open/closed | Repository and translation-provider interfaces support alternative implementations. Services accept a word source, phrase writer, and CSV writer. All concrete dependencies are assembled in bootstrap; adding an adapter only requires composition-root wiring. |
 | Liskov substitution | Repository review ordering is explicitly part of its contract and tested against SQLite, including ties and more than 50 words. Services consume domain entities rather than ORM objects. Removed the unnecessary abstract database constructor; constructors need not share a signature. Runtime tests cover the supplied adapters, not every possible future implementation. |
 | Interface segregation | The facade requires only a two-method session-lifecycle protocol rather than the full database/session API. The scheduler receives its actual services and no longer requires word-management operations just to duplicate notification behavior. Removed the unused bulk review-count API. Existing cohesive CRUD/settings interfaces remain. |
 | Dependency inversion / Clean Architecture | Core modules import only the standard library, domain, application, and pure settings constants. SQLAlchemy, GTK, HTTP clients, filesystem state, JSON persistence, and CSV output are outside the core. Both entry points use the same composition root. A test checks imports across every core Python module. |
-| KISS | Kept direct constructor injection and small callable ports; no DI framework or class hierarchy for single-function writers. Removed the settings TTL cache and duplicate review sorting. The small compatibility facade remains for UI/CLI callers. |
-| DRY | Review priority is calculated once, in SQL before the limit. Notification state tracking/review recording has one owner. Bulk and individual settings reads use the same typed getters. Defaults initialize once at startup, and each factory shares one settings service. Existing common GTK helpers and translation normalization remain shared. |
+| KISS | Kept direct constructor injection and small callable ports; no DI framework or class hierarchy for single-function writers. Removed the settings TTL cache and duplicate review sorting. UI/CLI callers access named services through `VocabService`, which owns the shared database lifecycle. |
+| DRY | Review priority is calculated once, in SQL before the limit. Notification state tracking/review recording has one owner. Bulk and individual settings reads use the same typed getters. Defaults initialize once at startup; all services share one settings service. GTK button/label layout and translation normalization remain shared. |
 
 ## Layer assessment
 
@@ -76,3 +76,67 @@ cancellation/overwrite protection, CSV output, and existing CLI behavior.
 Lint, source compilation, shell syntax, and diff checks supplement those tests.
 Desktop interaction on Linux/macOS and actual installation/network translation
 are separate integration checks; passing unit tests does not validate them.
+
+## Readability refactor, 2026-10-02
+
+Removed `VocabService.__getattr__`; GUI, CLI, and tests use explicit service
+attributes. Windows annotate their application dependency as `VocabService`.
+Language listing, translation API testing, and database lifecycle operations
+remain explicit methods on the application container.
+
+The word browser builds filters, the word list, actions, and pagination in
+separate methods. Selected-language lookup, selection reset, and search-timer
+cancellation have one implementation each. Deletion refreshes the language
+counts and words once. Undo uses a `WordSnapshot` or `TranslationDeletion` record.
+
+`EditWordDialog` owns edit fields, translation preview state, validation, and
+saving. It receives application services and the parent's background runner;
+closed dialogs ignore late preview results. Preview does not write to the DB.
+
+Queue and earliest-eligibility SQL queries share exposure-history aggregation
+and interval expressions. Filtering, ordering, and limits remain in SQL;
+transactions, ORM conversion, and undo conflict checks remain in repositories.
+
+Settings form collection/validation and directory-choice handling have separate
+methods. `SettingsRepository.set_many` commits all database settings together
+and rolls back the entire batch on failure. Default initialization also uses a
+batch while preserving existing preferences. JSON relocation state and OS
+autostart remain separate operations outside the database transaction.
+
+Typed settings getters and quiet-hour evaluation now live in `SettingsService`;
+service interfaces contain contracts only. Quiet-hour parsing is shared with
+the settings form. Word/review contracts include translation restore, snooze,
+and earliest eligibility. `add_word` delegates cache lookup, automatic
+translation, and selected-language result loading to explicit helpers.
+
+The scheduler uses two persistent workers and one condition for stop/settings
+wakeups. Monotonic deadlines preserve exact intervals and startup delays;
+settings changes recompute cadence from the last popup. A change generation
+prevents missed wakeups during work. Each iteration releases its DB session
+before waiting. Stop joins both workers before the GUI closes the database and
+suppresses notifications from late results. An in-flight WOTD translation must
+finish or time out before shutdown completes. Settings saves notify the
+scheduler through the existing window callback.
+
+Removed redundant language-getter and snapshot wrappers. Shared fixtures reduce
+the application-container tests from 164 to 57 lines. No new dependencies,
+frameworks, or architecture layers were introduced.
+
+Removed `ServiceFactory`; `bootstrap.py` directly assembles the services and
+injects them into the typed `VocabService` dataclass. `TranslationTestService`
+retains its separate responsibility. Abstract contracts keep ABC enforcement,
+signatures, and semantic documentation while omitting repetitive method-name
+descriptions. GTK helpers share button wiring and labelled rows; statistics
+rows use a short loop. Detailed word mapping reuses the base mapper, and review
+statistics use the domain dataclass fields via `asdict`.
+
+This reduction pass removes 223 physical Python lines from production sources
+(5588 to 5365, excluding tests). Core checks pass with 242 tests and 22 skips;
+the separate Broadway run passes 20 GUI tests with one documentation skip.
+
+Regressions cover settings rollback/recovery, quiet-hour boundaries, draft/cache
+translation behavior, directory-choice cancellation/errors, scheduler cadence,
+startup/stop wakeups, in-flight shutdown, and real SQLite exposure/session
+cleanup. GUI startup/settings/shutdown runs with a temporary DB, an isolated
+Broadway display, and a substituted tray/notification adapter. Real OS tray and
+network translation remain outside these checks.

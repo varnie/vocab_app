@@ -46,14 +46,14 @@ def test_windows_do_not_access_persistence_or_translation_adapters(path):
             assert node.attr not in {"word_repo", "translation_service", "session", "_db"}
 
 
-def test_factory_shares_settings_and_accepts_alternate_adapters(vocab_service):
+def test_services_share_settings_and_accept_alternate_adapters(vocab_service):
     service = vocab_service
     settings = service.settings_service
     assert service.word_service.settings_service is settings
     assert service.review_service.settings_service is settings
     assert service.wotd_service.settings_service is settings
     assert service.export_service.settings_service is settings
-    service.set_setting("target_lang", "es")
+    service.settings_service.set_setting("target_lang", "es")
     assert service.word_service.settings_service.get_settings()["target_lang"] == "es"
 
 
@@ -63,6 +63,12 @@ def test_bootstrap_initializes_database_for_both_entry_points(tmp_path):
     service = create_vocab_service(db_path=str(tmp_path / "vocab.db"))
     try:
         assert service.get_languages()
-        assert service.get_setting("review_interval") == "3600"
+        assert service.settings_service.get_setting("review_interval") == "3600"
+        settings = service.settings_service
+        assert all(component.settings_service is settings for component in (
+            service.word_service, service.review_service, service.wotd_service, service.export_service,
+        ))
+        assert service.notification_service._review is service.review_service
+        assert service.notification_service._word is service.word_service
     finally:
         service.close()

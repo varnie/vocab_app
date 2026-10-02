@@ -55,7 +55,6 @@ class TestCreateVocabService:
 
     @patch("bootstrap.SQLiteDatabase")
     @patch("bootstrap.get_db_path")
-    @patch("bootstrap.ServiceFactory")
     @patch("bootstrap.VocabService")
     @patch("bootstrap.TranslationServiceImpl")
     @patch("bootstrap.WordRepository")
@@ -72,7 +71,6 @@ class TestCreateVocabService:
         mock_word_repo,
         mock_trans_service,
         mock_vocab_service,
-        mock_factory,
         mock_get_db_path,
         mock_sqlite,
     ):

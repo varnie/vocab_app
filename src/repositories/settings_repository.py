@@ -24,10 +24,21 @@ class SettingsRepository(AbstractSettingsRepository, AbstractRepository):
 
     def set(self, key: str, value: str) -> None:
         """Set a setting value."""
-        setting = self.db.session.query(ORMSetting).filter_by(key=key).first()
-        if setting:
-            setting.value = value
-        else:
-            setting = ORMSetting(key=key, value=value)
-            self.db.session.add(setting)
-        self.commit()
+        self.set_many({key: value})
+
+    def set_many(self, values: dict[str, str]) -> None:
+        """Write a batch atomically and leave the session usable on failure."""
+        if not values:
+            return
+        session = self.db.session
+        try:
+            for key, value in values.items():
+                setting = session.query(ORMSetting).filter_by(key=key).first()
+                if setting:
+                    setting.value = value
+                else:
+                    session.add(ORMSetting(key=key, value=value))
+            self.commit()
+        except Exception:
+            session.rollback()
+            raise

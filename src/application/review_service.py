@@ -1,5 +1,5 @@
 """Review service - handles spaced repetition review logic."""
-
+from dataclasses import asdict
 
 from application.service_interfaces import AbstractReviewService, AbstractSettingsService
 from domain.entities import Word
@@ -34,14 +34,7 @@ class ReviewService(AbstractReviewService):
 
     def get_stats(self) -> dict:
         """Get statistics."""
-        stats = self.stats_repo.get_stats()
-        return {
-            "total_words": stats.total_words,
-            "today_words": stats.today_words,
-            "today_reviews": stats.today_reviews,
-            "total_reviews": stats.total_reviews,
-            "streak": stats.streak,
-        }
+        return asdict(self.stats_repo.get_stats())
 
     def get_language_counts(self) -> dict:
         """Get word count per language."""

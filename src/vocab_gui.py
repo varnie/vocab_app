@@ -111,12 +111,12 @@ class VocabApp(Gtk.Application):
             if get_desktop_environment() in (
                 "gnome",
                 "ubuntu",
-            ) and not self.vocab_service.get_setting(GNOME_TRAY_WARNING_KEY):
+            ) and not self.vocab_service.settings_service.get_setting(GNOME_TRAY_WARNING_KEY):
                 self.notify(
                     "GNOME detected. If tray icon is missing, "
                     "install 'Top Icons' or 'Tray Icons' extension.",
                 )
-                self.vocab_service.set_setting(GNOME_TRAY_WARNING_KEY, "true")
+                self.vocab_service.settings_service.set_setting(GNOME_TRAY_WARNING_KEY, "true")
 
     def _on_activate(self, app):
         # The first activation stays unobtrusive; subsequent launches open the library.
@@ -150,6 +150,8 @@ class VocabApp(Gtk.Application):
             self._windows[key] = win
 
     def _refresh_summaries(self):
+        if self.scheduler:
+            self.scheduler.settings_changed()
         for key in ("stats", "words_today"):
             window = self._windows.get(key)
             if window:
@@ -179,7 +181,7 @@ class VocabApp(Gtk.Application):
         if word:
             self.tray.set_label(str(word.phrase)[:20])
         else:
-            timestamp = self.vocab_service.next_available_at()
+            timestamp = self.vocab_service.review_service.next_available_at()
             if timestamp is None:
                 self.notify("No words available. Add a word with a translation in the selected language.")
             else:

@@ -6,13 +6,14 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk, Pango
 
+from application.vocab_service import VocabService
 from windows import BaseWindow, padded_box
 
 
 class WordsTodayWindow(BaseWindow):
     """Window showing words added today."""
 
-    def __init__(self, vocab_service):
+    def __init__(self, vocab_service: VocabService):
         super().__init__(title="Words Added Today", width=860, height=520)
         display = Gdk.Display.get_default()
         monitor = display.get_primary_monitor() or display.get_monitor(0) if display else None
@@ -115,7 +116,7 @@ class WordsTodayWindow(BaseWindow):
     def _populate(self) -> None:
         """Fetch and display words added today."""
         self.list_store.clear()
-        words = self.vocab_service.get_words_added_today()
+        words = self.vocab_service.word_service.get_words_added_today()
         for w in words:
             self.list_store.append([w.phrase, w.translation or ""])
         count = len(self.list_store)
@@ -127,7 +128,7 @@ class WordsTodayWindow(BaseWindow):
 
     def _refresh_wotd_banner(self) -> None:
         """Show today's Word of the Day above the list, if already shown."""
-        today = self.vocab_service.get_today_display()
+        today = self.vocab_service.wotd_service.get_today_display()
         if today is None:
             self.wotd_label.hide()
             return

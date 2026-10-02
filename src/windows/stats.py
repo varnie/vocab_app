@@ -5,13 +5,14 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from windows import BaseWindow, padded_box, show_message
+from application.vocab_service import VocabService
+from windows import BaseWindow, pack_button, padded_box, show_message
 
 
 class StatsWindow(BaseWindow):
     """Statistics window."""
 
-    def __init__(self, vocab_service):
+    def __init__(self, vocab_service: VocabService):
         super().__init__(title="Vocabulary Statistics", width=400, height=450)
         self.vocab_service = vocab_service
 
@@ -30,23 +31,15 @@ class StatsWindow(BaseWindow):
         self.add(box)
 
         # Stats
-        stats = self.vocab_service.get_stats()
+        stats = self.vocab_service.review_service.get_stats()
 
-        # Total words
-        row = self._make_row("Total words:", str(stats.get("total_words", 0)))
-        box.pack_start(row, False, False, 0)
-
-        # Added today
-        row = self._make_row("Added today:", str(stats.get("today_words", 0)))
-        box.pack_start(row, False, False, 0)
-
-        # Reviews today
-        row = self._make_row("Shown today:", str(stats.get("today_reviews", 0)))
-        box.pack_start(row, False, False, 0)
-
-        # Total reviews
-        row = self._make_row("Total exposures:", str(stats.get("total_reviews", 0)))
-        box.pack_start(row, False, False, 0)
+        for label, key in (
+            ("Total words:", "total_words"),
+            ("Added today:", "today_words"),
+            ("Shown today:", "today_reviews"),
+            ("Total exposures:", "total_reviews"),
+        ):
+            box.pack_start(self._make_row(label, str(stats.get(key, 0))), False, False, 0)
 
         # Separator
         sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -63,12 +56,8 @@ class StatsWindow(BaseWindow):
 
         # Export button
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        export_btn = Gtk.Button(label="Export CSV")
-        export_btn.connect("clicked", self.on_export)
-        refresh_btn = Gtk.Button(label="Refresh")
-        refresh_btn.connect("clicked", lambda _: self.refresh())
-        btn_box.pack_start(refresh_btn, True, True, 0)
-        btn_box.pack_start(export_btn, True, True, 0)
+        pack_button(btn_box, "Refresh", lambda _: self.refresh(), expand=True)
+        pack_button(btn_box, "Export CSV", self.on_export, expand=True)
         box.pack_start(btn_box, False, False, 0)
 
     def _make_row(self, label: str, value: str) -> Gtk.Box:
@@ -107,7 +96,9 @@ class StatsWindow(BaseWindow):
         if dialog.run() == Gtk.ResponseType.OK:
             try:
                 selected = language.get_active_id()
-                self.vocab_service.export_csv(dialog.get_filename(), None if selected == "all" else selected)
+                self.vocab_service.export_service.export_csv(
+                    dialog.get_filename(), None if selected == "all" else selected,
+                )
                 show_message(self, Gtk.MessageType.INFO, "Export successful!")
             except Exception as e:
                 show_message(self, Gtk.MessageType.ERROR, f"Export failed: {e}")

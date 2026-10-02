@@ -1,5 +1,6 @@
 """User-facing regressions exercised against real SQLite repositories."""
 
+import threading
 import time
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -74,22 +75,22 @@ def test_untranslated_filter_respects_selected_language(word_service, word_repo)
 
 def test_delete_word_with_undo_removes_word_and_translations(library):
     """Whole-word delete (browser popup for untranslated rows)."""
-    word = library.add_word("Gone", "Ушедший")
+    word = library.word_service.add_word("Gone", "Ушедший")
 
-    library.delete_word_with_undo(word.id)
+    library.word_service.delete_word_with_undo(word.id)
 
-    assert library.get_words() == []
-    assert library.get_translation(word.id) is None
+    assert library.word_service.get_words() == []
+    assert library.word_service.get_translation(word.id) is None
 
 
 def test_undo_word_delete_restores_word_with_translation(library):
     """Undo restores the original word and translation."""
-    word = library.add_word("Back", "Назад")
-    snapshot = library.delete_word_with_undo(word.id)
-    assert library.get_words() == []
-    library.restore_word(snapshot)
-    assert library.get_words()[0].id == word.id
-    assert library.get_translation(word.id) == "Назад"
+    word = library.word_service.add_word("Back", "Назад")
+    snapshot = library.word_service.delete_word_with_undo(word.id)
+    assert library.word_service.get_words() == []
+    library.word_service.restore_word(snapshot)
+    assert library.word_service.get_words()[0].id == word.id
+    assert library.word_service.get_translation(word.id) == "Назад"
 
 
 def test_clear_translation_and_undo(word_service, word_repo):
@@ -133,14 +134,14 @@ def test_failed_edit_and_review_are_atomic(tmp_path):
     service = create_vocab_service(db_path=str(tmp_path / "atomic.db"))
     db = service._db
     try:
-        word = service.add_word("Before", "original")
+        word = service.word_service.add_word("Before", "original")
         db.session.execute(text(
             "CREATE TRIGGER reject_translation BEFORE UPDATE ON translations "
             "BEGIN SELECT RAISE(ABORT, 'rejected'); END"
         ))
         db.commit()
         with pytest.raises(Exception, match="rejected"):
-            service.update_word(word.id, "After", "changed", target_lang="ru")
+            service.word_service.update_word(word.id, "After", "changed", target_lang="ru")
         assert service.word_service.word_repo.get_by_phrase("Before") is not None
         assert service.word_service.word_repo.get_by_phrase("After") is None
         db.session.execute(text(
@@ -149,7 +150,7 @@ def test_failed_edit_and_review_are_atomic(tmp_path):
         ))
         db.commit()
         with pytest.raises(Exception, match="history rejected"):
-            service.review_word(word.id)
+            service.review_service.review_word(word.id)
         assert db.session.query(History).count() == 0
         assert db.session.query(WordStats).count() == 0
     finally:
@@ -175,12 +176,13 @@ def test_quiet_hours_and_pause_cover_wotd(settings_service):
     settings_service.set_setting("quiet_end", "08:00")
     clock = MagicMock(wraps=datetime)
     clock.now.return_value = datetime(2026, 9, 27, 23, 0)
-    with patch("application.service_interfaces.datetime", clock):
+    with patch("application.settings_service.datetime", clock):
         assert settings_service.is_quiet_time()
         scheduler = ReviewScheduler(
             MagicMock(), MagicMock(), settings_service, MagicMock(), MagicMock(),
             MagicMock(), MagicMock(),
         )
+        scheduler.running = True
         scheduler._check_wotd()
         scheduler.wotd_service.get_word_of_the_day.assert_not_called()
     settings_service.set_setting("quiet_start", "")
@@ -188,6 +190,36 @@ def test_quiet_hours_and_pause_cover_wotd(settings_service):
     scheduler.pause_until(time.time() + 3600)
     scheduler._check_wotd()
     scheduler.wotd_service.get_word_of_the_day.assert_not_called()
+
+
+def test_scheduler_records_exposure_and_releases_real_sqlite_session(library, monkeypatch):
+    monkeypatch.setattr("application.review_scheduler.REVIEW_INITIAL_DELAY_SECONDS", 0)
+    library.word_service.add_word("Hello", "original")
+    monkeypatch.setattr(library.notification_service, "_write_phrase", lambda _: None)
+    released = threading.Event()
+    session_states = []
+    notifications = []
+
+    def cleanup():
+        library.remove_session()
+        session_states.append(library._db.ScopedSession.registry.has())
+        released.set()
+
+    scheduler = ReviewScheduler(
+        library.review_service, library.wotd_service, library.settings_service,
+        lambda body: notifications.append(body), lambda _: None,
+        library.notification_service, lambda _: None, cleanup,
+    )
+    scheduler.start()
+    try:
+        assert released.wait(2)
+        assert session_states == [False]
+        assert notifications == ["<b>Hello</b>\n→ original [RU]"]
+        assert library.review_service.get_stats()["total_reviews"] == 1
+    finally:
+        scheduler.stop()
+    assert not scheduler._review_thread.is_alive()
+    assert not scheduler._wotd_thread.is_alive()
 
 
 def test_invalid_language_does_not_rename(word_service, word_repo):

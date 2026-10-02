@@ -1,20 +1,12 @@
 """Abstract service interfaces - application layer defines contracts."""
 
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import Protocol
 
 from config import (
-    DEFAULT_REVIEW_INTERVAL,
     DEFAULT_SOURCE_LANG,
     DEFAULT_TARGET_LANG,
     DEFAULT_TRANSLATION_PROVIDER,
-    QUIET_END_KEY,
-    QUIET_START_KEY,
-    REVIEW_INTERVAL_KEY,
-    SOURCE_LANG_KEY,
-    TARGET_LANG_KEY,
-    TRANSLATION_PROVIDER_KEY,
 )
 from domain.entities import Word, WordSnapshot
 
@@ -53,9 +45,7 @@ class AbstractTranslationService(ABC):
         source_lang: str = DEFAULT_SOURCE_LANG,
         provider_name: str = DEFAULT_TRANSLATION_PROVIDER,
         *, allow_fallback: bool = True,
-    ) -> str:
-        """Translate text to target language using specified provider."""
-        pass
+    ) -> str: ...
 
 
 class AbstractWordManagementService(ABC):
@@ -77,6 +67,16 @@ class AbstractWordManagementService(ABC):
         pass
 
     @abstractmethod
+    def restore_translation(self, word_id: int, translation: str, target_lang: str) -> None:
+        """Restore a deleted translation without overwriting newer data."""
+        pass
+
+    @abstractmethod
+    def snooze_word(self, word_id: int, until: int) -> None:
+        """Hide a word from the review queue until the given timestamp."""
+        pass
+
+    @abstractmethod
     def add_word(
         self,
         phrase: str,
@@ -85,9 +85,7 @@ class AbstractWordManagementService(ABC):
         force_translate: bool = False,
         *, target_lang: str | None = None, source_lang: str | None = None,
         persist: bool = True,
-    ) -> Word:
-        """Add a new word or add translation to existing word."""
-        pass
+    ) -> Word: ...
 
     @abstractmethod
     def get_words(
@@ -100,55 +98,37 @@ class AbstractWordManagementService(ABC):
         descending: bool = False,
         untranslated: bool = False,
         hidden_only: bool = False,
-    ) -> list[Word]:
-        """Get all words with optional search and language filter."""
-        pass
+    ) -> list[Word]: ...
 
     @abstractmethod
-    def get_words_added_today(self) -> list[Word]:
-        """Get words added today."""
-        pass
+    def get_words_added_today(self) -> list[Word]: ...
 
     @abstractmethod
-    def get_translation(self, word_id: int) -> str | None:
-        """Get translation for a word."""
-        pass
+    def get_translation(self, word_id: int) -> str | None: ...
 
     @abstractmethod
-    def get_translation_with_lang(self, word_id: int) -> tuple[str | None, str | None]:
-        """Get translation and its language code."""
-        pass
+    def get_translation_with_lang(self, word_id: int) -> tuple[str | None, str | None]: ...
 
     @abstractmethod
-    def get_language_abbreviation(self, lang_code: str) -> str:
-        """Get language abbreviation for a code."""
-        pass
+    def get_language_abbreviation(self, lang_code: str) -> str: ...
 
     @abstractmethod
     def update_word(
         self, word_id: int, phrase: str, translation: str | None = None, target_lang: str | None = None
-    ) -> None:
-        """Update word phrase and optionally translation."""
-        pass
+    ) -> None: ...
 
     @abstractmethod
-    def delete_word(self, phrase: str) -> None:
-        """Delete a word."""
-        pass
+    def delete_word(self, phrase: str) -> None: ...
 
     @abstractmethod
-    def delete_translation(self, word_id: int, target_lang: str) -> None:
-        """Delete only translation for specific language, not the word."""
-        pass
+    def delete_translation(self, word_id: int, target_lang: str) -> None: ...
 
 
 class AbstractExportService(ABC):
     """Abstract interface for export operations."""
 
     @abstractmethod
-    def export_csv(self, filepath: str, target_lang: str | None = None) -> None:
-        """Export words to CSV."""
-        pass
+    def export_csv(self, filepath: str, target_lang: str | None = None) -> None: ...
 
 
 class AbstractNotificationService(ABC):
@@ -165,9 +145,7 @@ class AbstractNotificationService(ABC):
         pass
 
     @abstractmethod
-    def get_next_word_notification(self) -> str | None:
-        """Get next word notification body."""
-        pass
+    def get_next_word_notification(self) -> str | None: ...
 
 
 class AbstractReviewService(ABC):
@@ -179,89 +157,65 @@ class AbstractReviewService(ABC):
         pass
 
     @abstractmethod
+    def next_available_at(self) -> int | None:
+        """Return earliest word eligibility in the configured language."""
+        pass
+
+    @abstractmethod
     def review_word(self, word_id: int) -> None:
         """Record a review and update its last-reviewed timestamp."""
         pass
 
     @abstractmethod
-    def get_stats(self) -> dict:
-        """Get statistics."""
-        pass
+    def get_stats(self) -> dict: ...
 
     @abstractmethod
-    def get_language_counts(self) -> dict:
-        """Get word count per language."""
-        pass
+    def get_language_counts(self) -> dict: ...
 
 
 class AbstractSettingsService(ABC):
     """Abstract interface for settings operations."""
 
     @abstractmethod
-    def get_setting(self, key: str, default: str | None = None) -> str | None:
-        """Get a single setting."""
-        pass
+    def get_setting(self, key: str, default: str | None = None) -> str | None: ...
 
     @abstractmethod
-    def set_setting(self, key: str, value: str) -> None:
-        """Set a single setting."""
-        pass
+    def set_setting(self, key: str, value: str) -> None: ...
 
     @abstractmethod
-    def get_settings(self) -> dict:
-        """Get app settings."""
-        pass
+    def get_settings(self) -> dict: ...
 
     @abstractmethod
-    def save_settings(self, settings: dict) -> None:
-        """Save app settings."""
-        pass
+    def save_settings(self, settings: dict) -> None: ...
 
-    def get_source_lang(self) -> str:
-        """Get configured source language code."""
-        return self.get_setting(SOURCE_LANG_KEY, DEFAULT_SOURCE_LANG) or DEFAULT_SOURCE_LANG
+    @abstractmethod
+    def get_source_lang(self) -> str: ...
 
-    def get_target_lang(self) -> str:
-        """Get configured target language code."""
-        return self.get_setting(TARGET_LANG_KEY, DEFAULT_TARGET_LANG) or DEFAULT_TARGET_LANG
+    @abstractmethod
+    def get_target_lang(self) -> str: ...
 
-    def get_translation_provider(self) -> str:
-        """Get configured translation provider name."""
-        return (
-            self.get_setting(TRANSLATION_PROVIDER_KEY, DEFAULT_TRANSLATION_PROVIDER)
-            or DEFAULT_TRANSLATION_PROVIDER
-        )
+    @abstractmethod
+    def get_translation_provider(self) -> str: ...
 
+    @abstractmethod
     def get_review_interval(self) -> int:
         """Get review interval in seconds (falls back to default on bad values)."""
-        try:
-            return int(self.get_setting(REVIEW_INTERVAL_KEY, DEFAULT_REVIEW_INTERVAL) or DEFAULT_REVIEW_INTERVAL)
-        except (TypeError, ValueError):
-            return int(DEFAULT_REVIEW_INTERVAL)
+        pass
 
+    @abstractmethod
     def is_quiet_time(self) -> bool:
         """Local recurring quiet hours; equal or empty endpoints disable them."""
-        try:
-            start = datetime.strptime(self.get_setting(QUIET_START_KEY, "") or "", "%H:%M").time()
-            end = datetime.strptime(self.get_setting(QUIET_END_KEY, "") or "", "%H:%M").time()
-        except ValueError:
-            return False
-        now = datetime.now().time()
-        return start <= now < end if start < end else (start != end and (now >= start or now < end))
+        pass
 
 
 class AbstractWOTDService(ABC):
     """Abstract interface for Word of the Day operations."""
 
     @abstractmethod
-    def is_wotd_enabled(self) -> bool:
-        """Check if Word of the Day is enabled."""
-        pass
+    def is_wotd_enabled(self) -> bool: ...
 
     @abstractmethod
-    def get_wotd_level(self) -> str:
-        """Get the configured WOTD level."""
-        pass
+    def get_wotd_level(self) -> str: ...
 
     @abstractmethod
     def get_word_of_the_day(self) -> Word | None:
@@ -272,9 +226,7 @@ class AbstractWOTDService(ABC):
     def save_wotd_to_vocab(
         self, word: str, translation: str | None = None,
         *, target_lang: str | None = None, source_lang: str | None = None,
-    ) -> tuple[Word | None, bool]:
-        """Save WOTD word to user's vocabulary."""
-        pass
+    ) -> tuple[Word | None, bool]: ...
 
     @abstractmethod
     def get_today_display(self) -> tuple[str, str | None, str] | None:

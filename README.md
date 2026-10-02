@@ -211,7 +211,6 @@ History and the last-exposure timestamp are now committed together.
 ```
 src/
 ├── application/           # Service layer (business logic)
-│   ├── factory.py         # ServiceFactory - creates services with DI
 │   ├── export_service.py  # Export use case with injected CSV writer
 │   ├── notification_service.py
 │   ├── review_scheduler.py  # Background review loop + pause/WOTD
@@ -219,7 +218,7 @@ src/
 │   ├── settings_service.py
 │   ├── service_interfaces.py  # Abstract interfaces
 │   ├── translation_test_service.py
-│   ├── vocab_service.py   # Facade over all services
+│   ├── vocab_service.py   # Named services and shared database lifecycle
 │   ├── word_service.py    # Word CRUD operations
 │   └── wotd_service.py    # Word of the Day
 │
@@ -245,9 +244,15 @@ src/
 │   └── wotd_repository.py
 │
 ├── bootstrap.py          # Composition root and startup initialization
+├── windows/              # GTK windows; edit_word.py owns the edit dialog
 ├── vocab_gui.py          # GTK3 GUI entry point
 └── vocab_cli.py          # CLI entry point (hotkeys)
 ```
+
+GUI and CLI callers use named services, for example
+`vocab_service.word_service.add_word(...)` and
+`vocab_service.settings_service.get_target_lang()`. `VocabService` owns the shared
+database lifecycle; it does not dynamically forward unknown methods to services.
 
 ### Dependency boundaries
 
@@ -264,7 +269,7 @@ Settings keys and defaults remain in the dependency-free `config.py` module.
 
 Review ordering is owned by the repository query, notification review tracking
 by `NotificationService`, and settings normalization by the typed settings
-getters. All services created by one factory share one settings service.
+getters. Bootstrap assembles all services with one shared settings service.
 
 See [the project-wide architecture review](docs/architecture-review.md) for the
 SOLID, Clean Architecture, KISS, and DRY assessment and validation limits.

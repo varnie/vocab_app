@@ -5,15 +5,16 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
+from application.vocab_service import VocabService
 from config import DEFAULT_SOURCE_LANG, DEFAULT_TARGET_LANG, SOURCE_LANG_KEY, TARGET_LANG_KEY
 from infrastructure.current_phrase import write_current_phrase
-from windows import BaseWindow, padded_box
+from windows import BaseWindow, pack_button, padded_box
 
 
 class AddWordDialog(BaseWindow):
     """Add word dialog."""
 
-    def __init__(self, vocab_service, on_add=None):
+    def __init__(self, vocab_service: VocabService, on_add=None):
         super().__init__(title="Add New Word", width=400, height=250)
         self.vocab_service = vocab_service
         self.on_add = on_add
@@ -27,7 +28,7 @@ class AddWordDialog(BaseWindow):
         self.add(box)
 
         # Get source and target languages from settings
-        settings = self.vocab_service.get_settings()
+        settings = self.vocab_service.settings_service.get_settings()
         target_lang_code = settings.get(TARGET_LANG_KEY, DEFAULT_TARGET_LANG)
         source_lang_code = settings.get(SOURCE_LANG_KEY, DEFAULT_SOURCE_LANG)
         self.target_lang = target_lang_code
@@ -69,14 +70,10 @@ class AddWordDialog(BaseWindow):
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         btn_box.set_homogeneous(True)
 
-        cancel_btn = Gtk.Button(label="Cancel")
-        cancel_btn.connect("clicked", lambda _: self.close())
-        btn_box.pack_start(cancel_btn, True, True, 0)
+        pack_button(btn_box, "Cancel", lambda _: self.close(), expand=True)
 
-        self.save_btn = Gtk.Button(label="Save")
+        self.save_btn = pack_button(btn_box, "Save", self.on_add_clicked, expand=True)
         self.save_btn.get_style_context().add_class("suggested-action")
-        self.save_btn.connect("clicked", self.on_add_clicked)
-        btn_box.pack_start(self.save_btn, True, True, 0)
         self.without_translation = Gtk.CheckButton(label="Save without translation")
         box.pack_start(self.without_translation, False, False, 0)
         self.spinner = Gtk.Spinner()
@@ -125,7 +122,7 @@ class AddWordDialog(BaseWindow):
             # Translation runs without writes. Closing the window discards its
             # callback, so Cancel cannot leave a word saved in the background.
             try:
-                result = self.vocab_service.add_word(
+                result = self.vocab_service.word_service.add_word(
                     result.phrase, result.translation or None,
                     target_lang=self.target_lang, source_lang=self.source_lang,
                 )
@@ -138,7 +135,7 @@ class AddWordDialog(BaseWindow):
             self.destroy()
 
         self.run_background(
-            lambda: self.vocab_service.add_word(
+            lambda: self.vocab_service.word_service.add_word(
                 word, translation, auto_translate=auto_translate,
                 target_lang=self.target_lang, source_lang=self.source_lang,
                 persist=False,

@@ -45,31 +45,31 @@ class TestRunCli:
     def test_run_cli_save_success(self, mock_notify, mock_create):
         """Test --save with successful word save."""
         mock_service = MagicMock()
-        mock_service.add_word.return_value = MagicMock(id=1)
-        mock_service.get_translation_with_lang.return_value = ("привет", "ru")
-        mock_service.get_language_abbreviation.return_value = "RU"
+        mock_service.word_service.add_word.return_value = MagicMock(id=1)
+        mock_service.word_service.get_translation_with_lang.return_value = ("привет", "ru")
+        mock_service.word_service.get_language_abbreviation.return_value = "RU"
         mock_create.return_value = mock_service
 
         with patch("sys.argv", ["vocab_cli", "--save"]):
             with patch("vocab_cli.get_clipboard_text", return_value="Hello"):
                 result = run_cli()
                 assert result is True
-                mock_service.add_word.assert_called_once()
+                mock_service.word_service.add_word.assert_called_once()
 
     @patch("vocab_cli.create_vocab_service")
     @patch("vocab_cli.send_notification")
     def test_run_cli_save_success_no_translation(self, mock_notify, mock_create):
         """Test --save when word has no translation."""
         mock_service = MagicMock()
-        mock_service.add_word.return_value = MagicMock(id=1)
-        mock_service.get_translation_with_lang.return_value = (None, None)  # No translation
+        mock_service.word_service.add_word.return_value = MagicMock(id=1)
+        mock_service.word_service.get_translation_with_lang.return_value = (None, None)  # No translation
         mock_create.return_value = mock_service
 
         with patch("sys.argv", ["vocab_cli", "--save"]):
             with patch("vocab_cli.get_clipboard_text", return_value="Hello"):
                 result = run_cli()
                 assert result is True
-                mock_service.add_word.assert_called_once()
+                mock_service.word_service.add_word.assert_called_once()
                 # Preserve the user's spelling.
                 mock_notify.assert_called_once_with("Word saved: Hello")
 
@@ -78,7 +78,7 @@ class TestRunCli:
     def test_run_cli_save_value_error(self, mock_notify, mock_create):
         """Test --save with ValueError."""
         mock_service = MagicMock()
-        mock_service.add_word.side_effect = ValueError("Invalid input")
+        mock_service.word_service.add_word.side_effect = ValueError("Invalid input")
         mock_create.return_value = mock_service
 
         with patch("sys.argv", ["vocab_cli", "--save"]):
@@ -97,7 +97,7 @@ class TestRunCli:
         with patch("sys.argv", ["vocab_cli", "--delete"]):
             result = run_cli()
             assert result is True
-            mock_service.delete_word.assert_not_called()
+            mock_service.word_service.delete_word.assert_not_called()
 
     @patch("vocab_cli.create_vocab_service")
     @patch("vocab_cli.send_notification")
@@ -114,14 +114,14 @@ class TestRunCli:
                 mock_parser_class.return_value = mock_parser
                 result = run_cli()
                 assert result is True
-                mock_service.delete_word.assert_called_once_with("hello")
+                mock_service.word_service.delete_word.assert_called_once_with("hello")
 
     @patch("vocab_cli.create_vocab_service")
     @patch("vocab_cli.send_notification")
     def test_run_cli_save_generic_exception(self, mock_notify, mock_create):
         """Test --save with generic Exception."""
         mock_service = MagicMock()
-        mock_service.add_word.side_effect = Exception("Generic error")
+        mock_service.word_service.add_word.side_effect = Exception("Generic error")
         mock_create.return_value = mock_service
 
         with patch("sys.argv", ["vocab_cli", "--save"]):
@@ -135,7 +135,7 @@ class TestRunCli:
     def test_run_cli_next_with_word(self, mock_notify, mock_create):
         """Test --next with a word to show."""
         mock_service = MagicMock()
-        mock_service.get_next_word_notification.return_value = "Next word: hello"
+        mock_service.notification_service.get_next_word_notification.return_value = "Next word: hello"
         mock_create.return_value = mock_service
 
         with patch("sys.argv", ["vocab_cli", "--next"]):
@@ -148,7 +148,7 @@ class TestRunCli:
     def test_run_cli_next_no_word(self, mock_notify, mock_create):
         """Test --next with no word."""
         mock_service = MagicMock()
-        mock_service.get_next_word_notification.return_value = None
+        mock_service.notification_service.get_next_word_notification.return_value = None
         mock_create.return_value = mock_service
 
         with patch("sys.argv", ["vocab_cli", "--next"]):

@@ -1,7 +1,6 @@
 """Settings window."""
 
 import os
-from datetime import datetime
 
 import gi
 
@@ -9,11 +8,11 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 from application.service_interfaces import CEFR_LEVELS
+from application.settings_service import parse_quiet_hours
+from application.vocab_service import VocabService
 from config import (
     DATA_DIR_KEY,
     DEFAULT_SETTINGS,
-    DEFAULT_SOURCE_LANG,
-    DEFAULT_TARGET_LANG,
     DEFAULT_TRANSLATION_PROVIDER,
     DEFAULT_WOTD_LEVEL,
     QUIET_END_KEY,
@@ -31,13 +30,13 @@ from infrastructure.config_file import read_config, write_config
 from infrastructure.data_relocation import PENDING_RELOCATION_KEY, DataDirChoice, RelocationVerdict, relocate_database
 from infrastructure.translation import ProviderRegistry
 from version import get_version
-from windows import BaseWindow, padded_box
+from windows import BaseWindow, labelled_row, pack_button, padded_box
 
 
 class SettingsWindow(BaseWindow):
     """Settings window."""
 
-    def __init__(self, vocab_service, config_file=None):
+    def __init__(self, vocab_service: VocabService, config_file=None):
         super().__init__(title="Settings", width=650, height=720)
         self.vocab_service = vocab_service
         self.config_file = config_file
@@ -66,14 +65,9 @@ class SettingsWindow(BaseWindow):
         # Buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
-        cancel_btn = Gtk.Button(label="Cancel")
-        cancel_btn.connect("clicked", lambda _: self.destroy())
-        btn_box.pack_start(cancel_btn, True, True, 0)
-
-        save_btn = Gtk.Button(label="Save Settings")
-        save_btn.connect("clicked", self.on_save_settings)
+        pack_button(btn_box, "Cancel", lambda _: self.destroy(), expand=True)
+        save_btn = pack_button(btn_box, "Save Settings", self.on_save_settings, expand=True)
         save_btn.get_style_context().add_class("suggested-action")
-        btn_box.pack_start(save_btn, True, True, 0)
 
         footer = padded_box(spacing=8, margin=12)
         self.status_label = Gtk.Label(xalign=0)
@@ -97,8 +91,6 @@ class SettingsWindow(BaseWindow):
 
     def _build_review_section(self) -> Gtk.Frame:
         """Build the review interval section."""
-        interval_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        interval_box.pack_start(Gtk.Label("Review Interval:"), False, False, 0)
         self.interval_combo = Gtk.ComboBoxText()
         intervals = [
             ("1800", "30 minutes"),
@@ -110,12 +102,11 @@ class SettingsWindow(BaseWindow):
         for value, label in intervals:
             self.interval_combo.append(value, label)
         current_interval = str(
-            self.vocab_service.get_setting(REVIEW_INTERVAL_KEY, DEFAULT_SETTINGS[REVIEW_INTERVAL_KEY])
+            self.vocab_service.settings_service.get_setting(REVIEW_INTERVAL_KEY, DEFAULT_SETTINGS[REVIEW_INTERVAL_KEY])
         )
         self.interval_combo.set_active_id(current_interval)
-        interval_box.pack_end(self.interval_combo, False, False, 0)
         section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        section.pack_start(interval_box, False, False, 0)
+        section.pack_start(labelled_row("Review Interval:", self.interval_combo), False, False, 0)
         quiet = Gtk.Box(spacing=10)
         quiet.pack_start(Gtk.Label(label="Quiet hours (local HH:MM):"), False, False, 0)
         self.quiet_start = Gtk.Entry()
@@ -126,7 +117,7 @@ class SettingsWindow(BaseWindow):
         ):
             entry.set_width_chars(6)
             entry.set_placeholder_text(hint)
-            entry.set_text(self.vocab_service.get_setting(key, "") or "")
+            entry.set_text(self.vocab_service.settings_service.get_setting(key, "") or "")
             quiet.pack_start(entry, False, False, 0)
         section.pack_start(quiet, False, False, 0)
         hint = Gtk.Label(label="Leave both empty to disable. Applies to Word of the Day too.")
@@ -138,46 +129,33 @@ class SettingsWindow(BaseWindow):
         translation_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
         # Provider
-        provider_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        provider_box.pack_start(Gtk.Label("Dictionary/API:"), False, False, 0)
         self.provider_combo = Gtk.ComboBoxText()
         for provider, name in ProviderRegistry.list_providers():
             self.provider_combo.append(provider, name)
 
         # Preserve supported providers; fall back only for unknown/legacy IDs.
-        current_provider = self.vocab_service.get_settings().get(
-            TRANSLATION_PROVIDER_KEY, DEFAULT_TRANSLATION_PROVIDER
-        )
+        current_provider = self.vocab_service.settings_service.get_translation_provider()
         if current_provider not in [p[0] for p in ProviderRegistry.list_providers()]:
             current_provider = DEFAULT_TRANSLATION_PROVIDER  # Default if not found
 
         self.provider_combo.set_active_id(current_provider)
-        provider_box.pack_end(self.provider_combo, False, False, 0)
-        translation_box.pack_start(provider_box, False, False, 0)
+        translation_box.pack_start(labelled_row("Dictionary/API:", self.provider_combo), False, False, 0)
 
         # Source language
-        src_lang_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        src_lang_box.pack_start(Gtk.Label("Source Language:"), False, False, 0)
         self.src_lang_combo = Gtk.ComboBoxText()
-        current_src_lang = self.vocab_service.get_settings().get(SOURCE_LANG_KEY, DEFAULT_SOURCE_LANG)
+        current_src_lang = self.vocab_service.settings_service.get_source_lang()
         self._fill_lang_combo(self.src_lang_combo, current_src_lang)
-        src_lang_box.pack_end(self.src_lang_combo, False, False, 0)
-        translation_box.pack_start(src_lang_box, False, False, 0)
+        translation_box.pack_start(labelled_row("Source Language:", self.src_lang_combo), False, False, 0)
 
         # Target language
-        lang_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        lang_box.pack_start(Gtk.Label("Target Language:"), False, False, 0)
         self.lang_combo = Gtk.ComboBoxText()
-        current_lang = self.vocab_service.get_settings().get(TARGET_LANG_KEY, DEFAULT_TARGET_LANG)
+        current_lang = self.vocab_service.settings_service.get_target_lang()
         self._fill_lang_combo(self.lang_combo, current_lang)
-        lang_box.pack_end(self.lang_combo, False, False, 0)
-        translation_box.pack_start(lang_box, False, False, 0)
+        translation_box.pack_start(labelled_row("Target Language:", self.lang_combo), False, False, 0)
 
         # Test API button
         test_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        test_btn = Gtk.Button(label="Test API")
-        test_btn.connect("clicked", self.on_test_api)
-        test_btn_box.pack_start(test_btn, False, False, 0)
+        pack_button(test_btn_box, "Test API", self.on_test_api)
 
         self.test_spinner = Gtk.Spinner()
         self.test_spinner.set_size_request(20, 20)
@@ -266,7 +244,7 @@ class SettingsWindow(BaseWindow):
     def _build_wotd_section(self) -> Gtk.Frame:
         """Build the Word of the Day section."""
         self.wotd_check = Gtk.CheckButton(label="Enable Word of the Day")
-        wotd_enabled = self.vocab_service.get_setting(WOTD_ENABLED_KEY, "false") == "true"
+        wotd_enabled = self.vocab_service.settings_service.get_setting(WOTD_ENABLED_KEY, "false") == "true"
         self.wotd_check.set_active(wotd_enabled)
 
         wotd_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -278,7 +256,7 @@ class SettingsWindow(BaseWindow):
         for level in CEFR_LEVELS:
             self.wotd_level_combo.append(level, level)
 
-        current_level = self.vocab_service.get_setting(WOTD_LEVEL_KEY, DEFAULT_WOTD_LEVEL)
+        current_level = self.vocab_service.settings_service.get_setting(WOTD_LEVEL_KEY, DEFAULT_WOTD_LEVEL)
         self.wotd_level_combo.set_active_id(current_level)
         level_box.pack_end(self.wotd_level_combo, False, False, 0)
         wotd_box.pack_start(level_box, False, False, 0)
@@ -352,15 +330,47 @@ class SettingsWindow(BaseWindow):
 
     def on_save_settings(self, widget: Gtk.Widget) -> None:
         """Save settings."""
+        try:
+            settings = self._collect_settings()
+        except ValueError as exc:
+            self.status_label.set_text(str(exc))
+            return
+
+        data_dir_changed = self._apply_data_directory_choice(self.data_dir_entry.get_text().strip())
+        if data_dir_changed is None:
+            return
+
+        try:
+            self.vocab_service.settings_service.save_settings(settings)
+        except Exception as exc:
+            self.status_label.set_text(f"Could not save settings: {exc}")
+            return
+
+        self.on_data_changed()
+        if self.autostart_check.get_active():
+            AutostartManager.enable()
+        else:
+            AutostartManager.disable()
+
+        if data_dir_changed:
+            message = (
+                "Settings saved!\n\n"
+                "The directory change is scheduled for the next app start.\n"
+                "Until then, all changes are saved in the current library.\n"
+                "The original database will be kept as a backup."
+            )
+        else:
+            message = "Settings saved successfully!"
+        self.status_label.set_text(message)
+
+    def _collect_settings(self) -> dict:
+        """Read the form and reject invalid quiet hours before any writes."""
         start, end = self.quiet_start.get_text().strip(), self.quiet_end.get_text().strip()
-        if start or end:
-            try:
-                datetime.strptime(start, "%H:%M")
-                datetime.strptime(end, "%H:%M")
-            except ValueError:
-                self.status_label.set_text("Enter both quiet-hour times as HH:MM, or leave both empty.")
-                return
-        settings = {
+        try:
+            parse_quiet_hours(start, end)
+        except ValueError as exc:
+            raise ValueError("Enter both quiet-hour times as HH:MM, or leave both empty.") from exc
+        return {
             QUIET_START_KEY: start,
             QUIET_END_KEY: end,
             REVIEW_INTERVAL_KEY: self.interval_combo.get_active_id(),
@@ -371,45 +381,24 @@ class SettingsWindow(BaseWindow):
             WOTD_LEVEL_KEY: self.wotd_level_combo.get_active_id(),
         }
 
-        new_data_dir = self.data_dir_entry.get_text().strip()
-
-        data_dir_changed = False
-        if self.config_file:
-            config = read_config(self.config_file)
-            old_data_dir = config.get(DATA_DIR_KEY, "")
-            pending_dir = config.get(PENDING_RELOCATION_KEY, {}).get("data_dir")
-            if old_data_dir != new_data_dir and pending_dir != new_data_dir:
-                data_dir_changed = True
-                result = relocate_database(self.config_file, new_data_dir, self._ask_data_dir_choice)
-                if result.verdict is RelocationVerdict.CANCELLED:
-                    return
-                if result.verdict is RelocationVerdict.FAILED:
-                    self.status_label.set_text(result.error)
-                    return
-            elif old_data_dir == new_data_dir and PENDING_RELOCATION_KEY in config:
-                del config[PENDING_RELOCATION_KEY]
-                if not write_config(self.config_file, config):
-                    self.status_label.set_text("Could not cancel the pending directory change.")
-                    return
-            data_dir_changed = data_dir_changed or pending_dir == new_data_dir
-
-        self.vocab_service.save_settings(settings)
-
-        # Handle autostart
-        if self.autostart_check.get_active():
-            AutostartManager.enable()
-        else:
-            AutostartManager.disable()
-
-        # Show confirmation
-        if data_dir_changed:
-            msg_text = (
-                "Settings saved!\n\n"
-                "The directory change is scheduled for the next app start.\n"
-                "Until then, all changes are saved in the current library.\n"
-                "The original database will be kept as a backup."
-            )
-        else:
-            msg_text = "Settings saved successfully!"
-
-        self.status_label.set_text(msg_text)
+    def _apply_data_directory_choice(self, new_data_dir: str) -> bool | None:
+        """Return whether restart is needed, or None on cancellation/failure."""
+        if not self.config_file:
+            return False
+        config = read_config(self.config_file)
+        old_data_dir = config.get(DATA_DIR_KEY, "")
+        pending_dir = config.get(PENDING_RELOCATION_KEY, {}).get("data_dir")
+        if old_data_dir != new_data_dir and pending_dir != new_data_dir:
+            result = relocate_database(self.config_file, new_data_dir, self._ask_data_dir_choice)
+            if result.verdict is RelocationVerdict.CANCELLED:
+                return None
+            if result.verdict is RelocationVerdict.FAILED:
+                self.status_label.set_text(result.error)
+                return None
+            return True
+        if old_data_dir == new_data_dir and PENDING_RELOCATION_KEY in config:
+            del config[PENDING_RELOCATION_KEY]
+            if not write_config(self.config_file, config):
+                self.status_label.set_text("Could not cancel the pending directory change.")
+                return None
+        return pending_dir == new_data_dir

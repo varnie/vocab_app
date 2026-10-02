@@ -24,6 +24,21 @@ from repositories.base import AbstractRepository
 class WordRepository(AbstractWordRepository, AbstractRepository):
     """Repository for word operations."""
 
+    def _exposure_history(self):
+        """Aggregate exposures once per word for queue and eligibility queries."""
+        return self.db.session.query(
+            ORMHistory.word_id,
+            func.count(ORMHistory.id).label("review_count"),
+            func.max(ORMHistory.reviewed_at).label("last_shown"),
+        ).group_by(ORMHistory.word_id).subquery()
+
+    @staticmethod
+    def _exposure_interval(count):
+        return case(
+            *((count <= index, seconds) for index, seconds in enumerate(EXPOSURE_INTERVALS, 1)),
+            else_=EXPOSURE_INTERVALS[-1],
+        )
+
     def _get_language(self, code: str) -> ORMLanguage | None:
         """Get language ORM row by code, or None if unknown."""
         return self.db.session.query(ORMLanguage).filter_by(code=code).first()
@@ -237,16 +252,7 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         if limit <= 0:
             return []
         now = utc_now_ts()
-        review_counts = (
-            self.db.session.query(
-                ORMHistory.word_id,
-                func.count(ORMHistory.id).label("review_count"),
-                func.max(ORMHistory.reviewed_at).label("last_shown"),
-                func.min(ORMHistory.id).label("first_id"),
-            )
-            .group_by(ORMHistory.word_id)
-            .subquery()
-        )
+        review_counts = self._exposure_history()
         query = (
             self.db.session.query(ORMWord)
             .populate_existing()
@@ -281,10 +287,7 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
 
         count = func.coalesce(review_counts.c.review_count, 0)
         last_shown = func.coalesce(review_counts.c.last_shown, ORMWordStats.last_reviewed)
-        interval = case(
-            *((count <= index, seconds) for index, seconds in enumerate(EXPOSURE_INTERVALS, 1)),
-            else_=EXPOSURE_INTERVALS[-1],
-        )
+        interval = self._exposure_interval(count)
         # A legacy timestamp without history still represents a previous exposure.
         unseen = (count == 0) & last_shown.is_(None)
         due = query.filter(~unseen, last_shown + interval <= now)
@@ -414,16 +417,10 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
 
     def next_available_at(self, target_lang: str) -> int | None:
         """Earliest eligibility, including snoozed words; independent of cadence."""
-        counts = self.db.session.query(
-            ORMHistory.word_id, func.count(ORMHistory.id).label("count"),
-            func.max(ORMHistory.reviewed_at).label("last"),
-        ).group_by(ORMHistory.word_id).subquery()
-        count = func.coalesce(counts.c.count, 0)
-        interval = case(
-            *((count <= i, seconds) for i, seconds in enumerate(EXPOSURE_INTERVALS, 1)),
-            else_=EXPOSURE_INTERVALS[-1],
-        )
-        last = func.coalesce(counts.c.last, ORMWordStats.last_reviewed)
+        counts = self._exposure_history()
+        count = func.coalesce(counts.c.review_count, 0)
+        interval = self._exposure_interval(count)
+        last = func.coalesce(counts.c.last_shown, ORMWordStats.last_reviewed)
         eligible = func.max(func.coalesce(last + interval, 0), func.coalesce(WordPause.until, 0))
         return self.db.session.query(func.min(eligible)).select_from(ORMWord).join(
             ORMTranslation, ORMTranslation.word_id == ORMWord.id

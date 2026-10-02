@@ -4,13 +4,23 @@ import gi
 
 gi.require_version("Gtk", "3.0")
 import time
+from dataclasses import dataclass
 from datetime import datetime
 
 from gi.repository import Gdk, GLib, Gtk, Pango
 
+from application.vocab_service import VocabService
 from config import DEFAULT_TARGET_LANG, TARGET_LANG_KEY
-from domain.entities import Word
-from windows import BaseWindow, ask_confirm, padded_box, set_margins
+from domain.entities import Word, WordSnapshot
+from windows import BaseWindow, ask_confirm, pack_button, padded_box
+from windows.edit_word import EditWordDialog
+
+
+@dataclass(frozen=True)
+class TranslationDeletion:
+    word_id: int
+    translation: str
+    target_lang: str
 
 
 class WordBrowserWindow(BaseWindow):
@@ -23,7 +33,7 @@ class WordBrowserWindow(BaseWindow):
     delete_btn: Gtk.Button
     status_label: Gtk.Label
 
-    def __init__(self, vocab_service) -> None:
+    def __init__(self, vocab_service: VocabService) -> None:
         super().__init__(title="Word Browser", width=910, height=600)
         display = Gdk.Display.get_default()
         monitor = display.get_primary_monitor() or display.get_monitor(0) if display else None
@@ -38,7 +48,7 @@ class WordBrowserWindow(BaseWindow):
         self._search_timer_id: int | None = None
         self.sort = "phrase"
         self.descending = False
-        self._undo = None
+        self._undo: WordSnapshot | TranslationDeletion | None = None
 
         self.build_ui()
         self.load_words()
@@ -53,7 +63,12 @@ class WordBrowserWindow(BaseWindow):
         """Build the UI."""
         main_box = padded_box(spacing=10, margin=15)
         self.add(main_box)
+        self._build_filters(main_box)
+        self._build_word_list(main_box)
+        self._build_actions(main_box)
+        self._build_pagination(main_box)
 
+    def _build_filters(self, main_box: Gtk.Box) -> None:
         # Toolbar
         toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         main_box.pack_start(toolbar, False, False, 0)
@@ -66,9 +81,7 @@ class WordBrowserWindow(BaseWindow):
         self.search_entry.connect("activate", self.on_search_activate)
         toolbar.pack_start(self.search_entry, True, True, 0)
 
-        refresh_btn = Gtk.Button(label="Refresh")
-        refresh_btn.connect("clicked", self.on_refresh)
-        toolbar.pack_start(refresh_btn, False, False, 0)
+        pack_button(toolbar, "Refresh", self.on_refresh)
         toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         main_box.pack_start(toolbar, False, False, 0)
 
@@ -76,7 +89,7 @@ class WordBrowserWindow(BaseWindow):
         toolbar.pack_start(Gtk.Label(label="Target Language:"), False, False, 5)
 
         self.lang_combo = Gtk.ComboBoxText()
-        settings = self.vocab_service.get_settings()
+        settings = self.vocab_service.settings_service.get_settings()
         current_lang = settings.get(TARGET_LANG_KEY, DEFAULT_TARGET_LANG)
 
         self._rebuild_lang_combo(current_lang)
@@ -92,7 +105,7 @@ class WordBrowserWindow(BaseWindow):
         self.hidden_only.connect("toggled", self.on_lang_changed)
         toolbar.pack_start(self.hidden_only, False, False, 0)
 
-        # TreeView
+    def _build_word_list(self, main_box: Gtk.Box) -> None:
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_hexpand(True)
         scrolled.set_vexpand(True)
@@ -134,40 +147,25 @@ class WordBrowserWindow(BaseWindow):
         self.detail_label.set_max_width_chars(90)
         main_box.pack_start(self.detail_label, False, False, 0)
 
-        # Bottom bar
+    def _build_actions(self, main_box: Gtk.Box) -> None:
         bottom_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         main_box.pack_start(bottom_bar, False, False, 0)
 
-        # Delete button
-        self.delete_btn = Gtk.Button(label="Delete translation")
-        self.delete_btn.connect("clicked", self.on_delete)
-        self.delete_btn.set_sensitive(False)
-        bottom_bar.pack_start(self.delete_btn, False, False, 0)
-        self.undo_btn = Gtk.Button(label="Undo deletion")
-        self.undo_btn.set_sensitive(False)
-        self.undo_btn.connect("clicked", self.on_undo)
-        bottom_bar.pack_start(self.undo_btn, False, False, 0)
+        self.delete_btn = pack_button(bottom_bar, "Delete translation", self.on_delete, sensitive=False)
+        self.undo_btn = pack_button(bottom_bar, "Undo deletion", self.on_undo, sensitive=False)
         bottom_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         main_box.pack_start(bottom_bar, False, False, 0)
-        self.snooze_btn = Gtk.Button(label="Hide for 7 days")
-        self.snooze_btn.set_sensitive(False)
-        self.snooze_btn.connect("clicked", self.on_snooze)
-        bottom_bar.pack_start(self.snooze_btn, False, False, 0)
-        self.resume_btn = Gtk.Button(label="Show again")
-        self.resume_btn.set_sensitive(False)
-        self.resume_btn.connect("clicked", lambda _: self.on_snooze(None, resume=True))
-        bottom_bar.pack_start(self.resume_btn, False, False, 0)
+        self.snooze_btn = pack_button(bottom_bar, "Hide for 7 days", self.on_snooze, sensitive=False)
+        self.resume_btn = pack_button(
+            bottom_bar, "Show again", lambda _: self.on_snooze(None, resume=True), sensitive=False,
+        )
 
-        # Pagination and status get their own row so actions fit smaller screens.
+    def _build_pagination(self, main_box: Gtk.Box) -> None:
+        """Keep navigation on its own row so actions fit smaller screens."""
         bottom_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         main_box.pack_start(bottom_bar, False, False, 0)
-        self.prev_btn = Gtk.Button(label="← Prev")
-        self.prev_btn.connect("clicked", self.on_prev_page)
-        bottom_bar.pack_start(self.prev_btn, False, False, 0)
-
-        self.next_btn = Gtk.Button(label="Next →")
-        self.next_btn.connect("clicked", self.on_next_page)
-        bottom_bar.pack_start(self.next_btn, False, False, 0)
+        self.prev_btn = pack_button(bottom_bar, "← Prev", self.on_prev_page)
+        self.next_btn = pack_button(bottom_bar, "Next →", self.on_next_page)
 
         # Status label
         self.status_label = Gtk.Label(label="")
@@ -191,16 +189,9 @@ class WordBrowserWindow(BaseWindow):
     def load_words(self) -> None:
         """Load words from database."""
         search = self.search_entry.get_text().strip() or None
-        lang = self.lang_combo.get_active_id() if self.lang_combo.get_model() else None
-
-        # If empty or None, use current language from settings
-        if not lang:
-            settings = self.vocab_service.get_settings()
-            lang = settings.get(TARGET_LANG_KEY, DEFAULT_TARGET_LANG)
-
-        words = self.vocab_service.get_words(
+        words = self.vocab_service.word_service.get_words(
             search=search,
-            target_lang=lang,
+            target_lang=self._selected_language(),
             limit=self.page_size + 1,
             offset=self.current_page * self.page_size,
             sort=self.sort, descending=self.descending, untranslated=self.untranslated.get_active(),
@@ -217,6 +208,17 @@ class WordBrowserWindow(BaseWindow):
     def refresh_model(self) -> None:
         """Refresh the tree model."""
         self.model.clear()
+        self._clear_selection()
+
+        for i, word in enumerate(self.words):
+            last_shown = (
+                datetime.fromtimestamp(word.last_reviewed).strftime("%Y-%m-%d") if word.last_reviewed else "Never"
+            )
+            self.model.append([i + 1, word.phrase, word.translation, last_shown])
+
+        self._refresh_pagination()
+
+    def _clear_selection(self) -> None:
         self.selected_word_id = None
         self.delete_btn.set_sensitive(False)
         self.delete_btn.set_label("Delete translation")
@@ -224,19 +226,7 @@ class WordBrowserWindow(BaseWindow):
         self.resume_btn.set_sensitive(False)
         self.detail_label.set_text("")
 
-        for i, word in enumerate(self.words):
-            phrase = word.phrase
-            target = word.translation
-            last_reviewed_ts = word.last_reviewed
-
-            if last_reviewed_ts:
-                lr = datetime.fromtimestamp(last_reviewed_ts)
-                last_reviewed_str = lr.strftime("%Y-%m-%d")
-            else:
-                last_reviewed_str = "Never"
-
-            self.model.append([i + 1, phrase, target, last_reviewed_str])
-
+    def _refresh_pagination(self) -> None:
         total = len(self.words)
         start = self.current_page * self.page_size + 1 if total > 0 else 0
         end = start + total - 1 if total else 0
@@ -261,8 +251,7 @@ class WordBrowserWindow(BaseWindow):
 
     def on_search_changed(self, widget: Gtk.Widget) -> None:
         """Handle search entry changed with debounce."""
-        if self._search_timer_id is not None:
-            GLib.source_remove(self._search_timer_id)
+        self._cancel_search()
         self._search_timer_id = GLib.timeout_add(300, self._debounced_search)
 
     def _debounced_search(self) -> bool:
@@ -274,9 +263,7 @@ class WordBrowserWindow(BaseWindow):
 
     def on_search_activate(self, widget: Gtk.Widget) -> None:
         """Handle search entry Enter key."""
-        if self._search_timer_id is not None:
-            GLib.source_remove(self._search_timer_id)
-            self._search_timer_id = None
+        self._cancel_search()
         self.current_page = 0
         self.load_words()
 
@@ -327,13 +314,9 @@ class WordBrowserWindow(BaseWindow):
                     f"{word.phrase}\n{word.translation or 'No translation in this language'}{status}"
                 )
             else:
-                self.selected_word_id = None
-                self.delete_btn.set_sensitive(False)
+                self._clear_selection()
         else:
-            self.selected_word_id = None
-            self.delete_btn.set_sensitive(False)
-            self.snooze_btn.set_sensitive(False)
-            self.resume_btn.set_sensitive(False)
+            self._clear_selection()
 
     def on_row_activated(
         self, treeview: Gtk.TreeView, path: Gtk.TreePath, column: Gtk.TreeViewColumn
@@ -349,55 +332,41 @@ class WordBrowserWindow(BaseWindow):
 
     def on_delete(self, widget: Gtk.Widget) -> None:
         """Handle delete button clicked."""
-        if not self.selected_word_id:
-            return
-
-        # Find the word
-        word = None
-        for w in self.words:
-            if w.id == self.selected_word_id:
-                word = w
-                break
-
+        word = self._selected_word()
         if not word:
             return
-
-        # Get current language from dropdown
-        current_lang = self.lang_combo.get_active_id() if self.lang_combo.get_model() else None
-        if not current_lang:
-            settings = self.vocab_service.get_settings()
-            current_lang = settings.get(TARGET_LANG_KEY, DEFAULT_TARGET_LANG)
+        current_lang = self._selected_language()
 
         if word.translation:
             # Confirm dialog
             if ask_confirm(self, f"Delete translation for '{word.phrase}'?"):
                 # Only delete translation for current language, not the whole word
-                self.vocab_service.delete_translation(self.selected_word_id, current_lang)
-                self._undo = ("translation", word.id, word.translation, current_lang)
+                self.vocab_service.word_service.delete_translation(self.selected_word_id, current_lang)
+                self._undo = TranslationDeletion(word.id, word.translation, current_lang)
                 self._after_delete()
         elif ask_confirm(self, f"Delete word '{word.phrase}' in ALL languages?\n"
                          "This removes every translation, review history and hidden-until date.\n"
                          "Missing a translation in this view does not mean the word has no other translations."):
-            snapshot = self.vocab_service.delete_word_with_undo(self.selected_word_id)
-            self._undo = ("word", snapshot)
+            snapshot = self.vocab_service.word_service.delete_word_with_undo(self.selected_word_id)
+            self._undo = snapshot
             self._after_delete()
 
     def _after_delete(self) -> None:
         """Common refresh after a delete or undo."""
         self.undo_btn.set_sensitive(True)
         self.selected_word_id = None
-        self.load_words()
         self.refresh_lang_dropdown()
         self.on_data_changed()
 
     def on_undo(self, _widget):
         if self._undo:
             try:
-                kind, *payload = self._undo
-                if kind == "word":
-                    self.vocab_service.restore_word(*payload)
+                if isinstance(self._undo, WordSnapshot):
+                    self.vocab_service.word_service.restore_word(self._undo)
                 else:
-                    self.vocab_service.restore_translation(*payload)
+                    self.vocab_service.word_service.restore_translation(
+                        self._undo.word_id, self._undo.translation, self._undo.target_lang,
+                    )
             except ValueError as exc:
                 self.status_label.set_text(str(exc))
                 return
@@ -408,14 +377,15 @@ class WordBrowserWindow(BaseWindow):
 
     def on_snooze(self, _widget, resume=False):
         if self.selected_word_id:
-            self.vocab_service.snooze_word(self.selected_word_id, 0 if resume else int(time.time()) + 7 * 86400)
+            until = 0 if resume else int(time.time()) + 7 * 86400
+            self.vocab_service.word_service.snooze_word(self.selected_word_id, until)
             self.load_words()
             self.on_data_changed()
             self.status_label.set_text("Word is available again." if resume else "Hidden from the queue for 7 days.")
 
     def _rebuild_lang_combo(self, preserve_id: str | None) -> None:
         """Rebuild the language dropdown, preserving the given selection."""
-        lang_counts = self.vocab_service.get_language_counts()
+        lang_counts = self.vocab_service.review_service.get_language_counts()
         languages = self.vocab_service.get_languages()
         sorted_languages = sorted(languages, key=lambda lang: lang.name)
         lang_names = {lang.code: lang.name for lang in languages}
@@ -441,11 +411,7 @@ class WordBrowserWindow(BaseWindow):
 
     def refresh_lang_dropdown(self) -> None:
         """Refresh language dropdown counts."""
-        # Preserve current selection before rebuilding
-        selected_lang = self.lang_combo.get_active_id() if self.lang_combo.get_model() else None
-        if not selected_lang:
-            settings = self.vocab_service.get_settings()
-            selected_lang = settings.get(TARGET_LANG_KEY, DEFAULT_TARGET_LANG)
+        selected_lang = self._selected_language()
 
         self.lang_combo.handler_block_by_func(self.on_lang_changed)
         try:
@@ -456,85 +422,18 @@ class WordBrowserWindow(BaseWindow):
         # Reload words with the selected language
         self.load_words()
 
+    def _selected_language(self) -> str:
+        return self.lang_combo.get_active_id() or self.vocab_service.settings_service.get_target_lang()
+
+    def _selected_word(self) -> Word | None:
+        return next((word for word in self.words if word.id == self.selected_word_id), None)
+
     def show_edit_dialog(self, word: Word) -> None:
-        """Show edit dialog for a word."""
-        dialog = Gtk.Dialog(
-            "Edit Word",
-            self,
-            Gtk.DialogFlags.DESTROY_WITH_PARENT,
-            ("Cancel", Gtk.ResponseType.CANCEL, "Save", Gtk.ResponseType.OK),
+        dialog = EditWordDialog(
+            self, word, self._selected_language(),
+            self.vocab_service.word_service, self.vocab_service.settings_service,
+            self.run_background,
         )
-
-        box = dialog.get_content_area()
-        set_margins(box, 15)
-
-        # Word entry
-        box.pack_start(Gtk.Label("Word:"), False, False, 5)
-        word_entry = Gtk.Entry()
-        word_entry.set_text(word.phrase)
-        box.pack_start(word_entry, False, False, 5)
-
-        # Translation entry
-        box.pack_start(Gtk.Label("Translation:"), False, False, 5)
-        trans_entry = Gtk.Entry()
-        trans_entry.set_text(word.translation)
-        box.pack_start(trans_entry, False, False, 5)
-        target_lang = self.lang_combo.get_active_id()
-        error_label = Gtk.Label(xalign=0)
-        error_label.set_line_wrap(True)
-        box.pack_start(error_label, False, False, 5)
-        dialog.set_default_response(Gtk.ResponseType.OK)
-        dialog.get_widget_for_response(Gtk.ResponseType.OK).get_style_context().add_class("suggested-action")
-        for entry in (word_entry, trans_entry):
-            entry.set_activates_default(True)
-        translate_btn = Gtk.Button(label="Translate again")
-        box.pack_start(translate_btn, False, False, 5)
-        # Translation previews do not persist anything until Save is pressed.
-        alive = [True]
-        dialog.connect("destroy", lambda *_: alive.__setitem__(0, False))
-
-        def translate(_button):
-            phrase = word_entry.get_text().strip()
-            source = self.vocab_service.settings_service.get_source_lang()
-            translate_btn.set_sensitive(False)
-            for entry in (word_entry, trans_entry):
-                entry.set_sensitive(False)
-            dialog.set_response_sensitive(Gtk.ResponseType.OK, False)
-            error_label.set_text("Translating…")
-
-            def complete(result, error):
-                if alive[0]:
-                    translate_btn.set_sensitive(True)
-                    for entry in (word_entry, trans_entry):
-                        entry.set_sensitive(True)
-                    dialog.set_response_sensitive(Gtk.ResponseType.OK, True)
-                    error_label.set_text(error or "")
-                    if not error:
-                        trans_entry.set_text(result)
-
-            self.run_background(
-                lambda: self.vocab_service.translate_preview(
-                    phrase, target_lang, source
-                ), complete,
-            )
-
-        translate_btn.connect("clicked", translate)
-
-        dialog.show_all()
-
-        while dialog.run() == Gtk.ResponseType.OK:
-            new_phrase = word_entry.get_text().strip()
-            new_trans = trans_entry.get_text().strip()
-
-            try:
-                self.vocab_service.update_word(
-                    word.id, new_phrase, new_trans, target_lang=target_lang
-                )
-            except ValueError as exc:
-                error_label.set_text(str(exc))
-                continue
+        if dialog.edit():
             self.refresh_lang_dropdown()
             self.on_data_changed()
-            break
-
-        dialog.destroy()

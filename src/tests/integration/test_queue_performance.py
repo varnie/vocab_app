@@ -33,7 +33,7 @@ def test_large_queue(tmp_path):
         elapsed = []
         for _ in range(11):
             start = time.perf_counter()
-            assert service.get_next_word() is not None
+            assert service.review_service.get_next_word() is not None
             elapsed.append((time.perf_counter() - start) * 1000)
         print(f"\n10,000 words / 200,000 exposures: median={statistics.median(elapsed[1:]):.2f} ms")
     finally:
