@@ -2,11 +2,8 @@
 
 import logging
 
-from application.service_interfaces import (
-    AbstractSettingsService,
-    AbstractTranslationService,
-    AbstractWordManagementService,
-)
+from application.service_interfaces import AbstractTranslationService
+from application.settings_service import SettingsService
 from domain.entities import Word, WordSnapshot
 from domain.exceptions import TranslationError
 from domain.repositories import AbstractLanguageRepository, AbstractWordRepository
@@ -15,7 +12,7 @@ from domain.time_utils import local_today_start_ts
 logger = logging.getLogger(__name__)
 
 
-class WordManagementService(AbstractWordManagementService):
+class WordManagementService:
     """Service for word CRUD operations."""
 
     MIN_PHRASE_LENGTH = 1
@@ -25,7 +22,7 @@ class WordManagementService(AbstractWordManagementService):
         self,
         word_repo: AbstractWordRepository,
         language_repo: AbstractLanguageRepository,
-        settings_service: AbstractSettingsService,
+        settings_service: SettingsService,
         translation_service: AbstractTranslationService,
     ) -> None:
         self.word_repo = word_repo
@@ -48,35 +45,39 @@ class WordManagementService(AbstractWordManagementService):
 
     def add_word(
         self, phrase: str, translation: str | None = None, auto_translate: bool = False,
-        force_translate: bool = False,
         *, target_lang: str | None = None, source_lang: str | None = None,
-        persist: bool = True,
     ) -> Word:
         """Add a new word or add translation to existing word."""
+        draft = self.prepare_word(
+            phrase, translation, auto_translate, target_lang=target_lang, source_lang=source_lang,
+        )
+        if draft.translation:
+            self.word_repo.save_word(draft.phrase, draft.translation, draft.language_code)
+        else:
+            self.word_repo.add(draft.phrase)
+        return self._get_saved_word(draft.phrase, draft.language_code)
+
+    def prepare_word(
+        self, phrase: str, translation: str | None = None, auto_translate: bool = False,
+        *, target_lang: str | None = None, source_lang: str | None = None,
+    ) -> Word:
+        """Validate and resolve a translation without writing to the vocabulary."""
         phrase = self._normalize_phrase(phrase)
         target_lang = target_lang or self.settings_service.get_target_lang()
         source_lang = source_lang or self.settings_service.get_source_lang()
 
         if not translation and auto_translate:
-            cached = self._get_cached_word(phrase, target_lang, force_translate)
+            cached = self._get_cached_word(phrase, target_lang)
             if cached is not None:
                 return cached
             translation = self._translate_for_add(phrase, target_lang, source_lang)
 
-        if not persist:
-            return Word(phrase=phrase, translation=translation or "", language_code=target_lang)
+        return Word(phrase=phrase, translation=translation or "", language_code=target_lang)
 
-        if translation:
-            self.word_repo.save_word(phrase, translation, target_lang)
-        else:
-            self.word_repo.add(phrase)
-
-        return self._get_saved_word(phrase, target_lang)
-
-    def _get_cached_word(self, phrase: str, target_lang: str, force_translate: bool) -> Word | None:
+    def _get_cached_word(self, phrase: str, target_lang: str) -> Word | None:
         existing = self.word_repo.get_by_phrase(phrase)
         cached = self.word_repo.get_translation(existing.id, target_lang) if existing else None
-        if cached is None or force_translate:
+        if cached is None:
             return None
         existing.translation = cached.translation
         existing.language_code = target_lang

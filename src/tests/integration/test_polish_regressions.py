@@ -8,7 +8,6 @@ from unittest.mock import Mock
 import pytest
 from sqlalchemy import text
 
-from application.translation_test_service import TranslationTestService
 from bootstrap import create_vocab_service
 from domain.entities import WordSnapshot
 from domain.exceptions import TranslationError
@@ -112,21 +111,20 @@ def test_wotd_keeps_request_language(library, monkeypatch):
         return "яблоко"
 
     monkeypatch.setattr(library.wotd_service.translation_service, "translate", translate)
-    word = library.wotd_service.get_word_of_the_day()
+    word, _level = library.wotd_service.get_word_of_the_day()
     assert word.language_code == "ru"
     assert library.word_service.word_repo.get_translation(word.id, "fr") is None
 
 
-def test_provider_test_cannot_succeed_via_fallback(monkeypatch):
-    selected, fallback = Mock(), Mock()
-    selected.translate.side_effect = TranslationError("selected provider failed")
-    fallback.translate.return_value = "fallback result"
-    monkeypatch.setattr("infrastructure.translation.ProviderRegistry.get", lambda name:
-                        selected if name == "google_direct" else fallback)
-    translator = TranslationServiceImpl()
-    assert not TranslationTestService(translator).test_connection(provider_name="google_direct")
-    fallback.translate.assert_not_called()
-    assert translator.translate("hello", provider_name="google_direct") == "fallback result"
+def test_provider_test_cannot_succeed_via_fallback(library, monkeypatch):
+    worker = Mock(side_effect=[TranslationError("selected provider failed")])
+    monkeypatch.setattr("infrastructure.translation._bounded_translation", worker)
+    assert not library.test_translation_api(provider_name="google_direct")
+    worker.assert_called_once_with("google_direct", "hello", "en", "ru")
+    worker.reset_mock(side_effect=True)
+    worker.side_effect = [TranslationError("selected provider failed"), "fallback result"]
+    assert TranslationServiceImpl().translate("hello", provider_name="google_direct") == "fallback result"
+    assert worker.call_count == 2
 
 
 def test_hidden_filter_and_resume_do_not_record_exposures(library):

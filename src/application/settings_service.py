@@ -2,7 +2,6 @@
 
 from datetime import datetime, time
 
-from application.service_interfaces import AbstractSettingsService
 from config import (
     DEFAULT_REVIEW_INTERVAL,
     DEFAULT_SETTINGS,
@@ -26,7 +25,7 @@ def parse_quiet_hours(start: str, end: str) -> tuple[time, time] | None:
     return datetime.strptime(start, "%H:%M").time(), datetime.strptime(end, "%H:%M").time()
 
 
-class SettingsService(AbstractSettingsService):
+class SettingsService:
     """Service for managing application settings."""
 
     def __init__(self, settings_repo: AbstractSettingsRepository) -> None:

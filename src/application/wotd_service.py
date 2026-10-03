@@ -2,13 +2,9 @@
 
 import logging
 
-from application.service_interfaces import (
-    AbstractSettingsService,
-    AbstractTranslationService,
-    AbstractWordManagementService,
-    AbstractWOTDService,
-    WordSource,
-)
+from application.service_interfaces import AbstractTranslationService, WordSource
+from application.settings_service import SettingsService
+from application.word_service import WordManagementService
 from config import DEFAULT_WOTD_LEVEL, WOTD_ENABLED_KEY, WOTD_LEVEL_KEY
 from domain.entities import Word
 from domain.exceptions import TranslationError
@@ -17,14 +13,14 @@ from domain.repositories import AbstractWOTDRepository
 logger = logging.getLogger(__name__)
 
 
-class WOTDService(AbstractWOTDService):
+class WOTDService:
     """Service for Word of the Day functionality."""
 
     def __init__(
         self,
-        settings_service: AbstractSettingsService,
+        settings_service: SettingsService,
         wotd_repo: AbstractWOTDRepository,
-        word_service: AbstractWordManagementService,
+        word_service: WordManagementService,
         translation_service: AbstractTranslationService,
         word_source: WordSource,
     ) -> None:
@@ -43,8 +39,8 @@ class WOTDService(AbstractWOTDService):
         """Get the configured WOTD level."""
         return self.settings_service.get_setting(WOTD_LEVEL_KEY, DEFAULT_WOTD_LEVEL) or DEFAULT_WOTD_LEVEL
 
-    def get_word_of_the_day(self) -> Word | None:
-        """Get Word of the Day - adds to vocab and returns Word entity."""
+    def get_word_of_the_day(self) -> tuple[Word, str] | None:
+        """Save today's candidate; consume the day only after notification delivery."""
         if not self.is_wotd_enabled():
             return None
 
@@ -60,7 +56,7 @@ class WOTDService(AbstractWOTDService):
         word_level = word_data["level"]
 
         provider_name = self.settings_service.get_translation_provider()
-        source_lang = self.settings_service.get_source_lang()
+        source_lang = "en"  # The CEFR word source contains English vocabulary.
         target_lang = self.settings_service.get_target_lang()
 
         try:
@@ -80,9 +76,10 @@ class WOTDService(AbstractWOTDService):
         if not saved or word_entity is None:
             return None
 
-        # Only consume today's WOTD after it is safely available in vocabulary.
-        self.wotd_repo.mark_shown(word, word_level)
-        return word_entity
+        return word_entity, word_level
+
+    def mark_shown(self, word: Word, level: str) -> None:
+        self.wotd_repo.mark_shown(word.phrase, level)
 
     def get_today_display(self) -> tuple[str, str | None, str] | None:
         """Today's shown word as (word, translation-or-None, level), or None."""

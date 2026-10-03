@@ -140,3 +140,39 @@ startup/stop wakeups, in-flight shutdown, and real SQLite exposure/session
 cleanup. GUI startup/settings/shutdown runs with a temporary DB, an isolated
 Broadway display, and a substituted tray/notification adapter. Real OS tray and
 network translation remain outside these checks.
+
+## Service and dependency cleanup, 2026-10-03
+
+Internal services now use concrete types. Contracts remain for repositories,
+translation, word sources, and database lifecycle. `prepare_word` validates and
+resolves a translation without writing to the vocabulary; `add_word` saves it.
+Removed the unused `force_translate` option. Fresh edit previews still use
+`translate_preview` and preserve the saved translation until the user saves.
+
+Provider names live in one table. A shared subprocess call handles timeouts,
+normalization, and MyMemory language codes. Fallback order is unchanged.
+The settings connection check calls the selected translator without fallback;
+it no longer needs a separate service class.
+
+GUI and CLI use the same notification operation. It records history and current
+phrase only after successful delivery. WOTD uses English as its source language
+and marks the day shown after its notification succeeds. Browser sizing keeps
+the default dimensions when a virtual monitor reports no usable work area.
+
+Repository fixtures use the production SQLite adapter with temporary files.
+Removed tests of mock return values and ordinary attribute lookup. Regressions
+cover failed notification delivery, unchanged review eligibility, GUI and CLI
+delivery handling, WOTD language selection, and deferred WOTD history.
+
+Runtime dependencies live in `requirements.txt`; `requirements-dev.txt` adds the
+test tools. Project metadata reads runtime dependencies and `VERSION` from those
+files. Version changes are manual release changes; the workflow that committed
+and force-pushed a SHA after each push has been removed. Ruff targets Python 3.10,
+matching the declared minimum version.
+
+Validation: 244 core tests passed, with 23 opt-in tests skipped. The isolated
+Broadway run passed 21 GUI tests with `G_DEBUG=fatal-criticals`; one screenshot
+update test was skipped. The host's X11-only canberra module was disabled for
+that process. Ruff, shell syntax, dependency resolution without installation,
+and project metadata/wheel generation also passed. OS notification delivery,
+network translation, macOS, and the remote CI run were not exercised.

@@ -21,6 +21,15 @@ class TestRunCli:
     """Tests for run_cli function."""
 
     @patch("vocab_cli.create_vocab_service")
+    def test_version_does_not_open_database(self, mock_create, capsys):
+        with patch("sys.argv", ["vocab_cli", "--version"]), patch("vocab_cli.get_version", return_value="1.2.3"):
+            with pytest.raises(SystemExit) as result:
+                run_cli()
+        assert result.value.code == 0
+        assert capsys.readouterr().out == "vocab_cli 1.2.3\n"
+        mock_create.assert_not_called()
+
+    @patch("vocab_cli.create_vocab_service")
     def test_run_cli_no_args_returns_false(self, mock_create):
         """Test that run_cli returns False when no args provided."""
         with patch("sys.argv", ["vocab_cli"]):
@@ -132,23 +141,25 @@ class TestRunCli:
 
     @patch("vocab_cli.create_vocab_service")
     @patch("vocab_cli.send_notification")
-    def test_run_cli_next_with_word(self, mock_notify, mock_create):
-        """Test --next with a word to show."""
-        mock_service = MagicMock()
-        mock_service.notification_service.get_next_word_notification.return_value = "Next word: hello"
-        mock_create.return_value = mock_service
+    @pytest.mark.parametrize("delivered", [True, False])
+    def test_run_cli_next_with_word(self, mock_notify, mock_create, vocab_service, delivered):
+        """The CLI records only successful delivery through the real service."""
+        vocab_service.word_service.add_word("hello", "привет")
+        mock_create.return_value = vocab_service
+        mock_notify.return_value = delivered
 
         with patch("sys.argv", ["vocab_cli", "--next"]):
             result = run_cli()
-            assert result is True
-            mock_notify.assert_called_once_with("Next word: hello")
+        assert result is delivered
+        mock_notify.assert_called_once_with("<b>hello</b>\n→ привет [RU]")
+        assert vocab_service.review_service.get_stats()["total_reviews"] == int(delivered)
 
     @patch("vocab_cli.create_vocab_service")
     @patch("vocab_cli.send_notification")
     def test_run_cli_next_no_word(self, mock_notify, mock_create):
         """Test --next with no word."""
         mock_service = MagicMock()
-        mock_service.notification_service.get_next_word_notification.return_value = None
+        mock_service.notification_service.show_next.return_value = None
         mock_create.return_value = mock_service
 
         with patch("sys.argv", ["vocab_cli", "--next"]):

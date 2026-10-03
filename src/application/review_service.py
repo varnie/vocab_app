@@ -1,19 +1,19 @@
 """Review service - handles spaced repetition review logic."""
 from dataclasses import asdict
 
-from application.service_interfaces import AbstractReviewService, AbstractSettingsService
+from application.settings_service import SettingsService
 from domain.entities import Word
 from domain.repositories import AbstractStatsRepository, AbstractWordRepository
 
 
-class ReviewService(AbstractReviewService):
+class ReviewService:
     """Service for review operations."""
 
     def __init__(
         self,
         word_repo: AbstractWordRepository,
         stats_repo: AbstractStatsRepository,
-        settings_service: AbstractSettingsService,
+        settings_service: SettingsService,
     ) -> None:
         self.word_repo = word_repo
         self.stats_repo = stats_repo

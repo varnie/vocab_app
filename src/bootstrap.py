@@ -7,7 +7,6 @@ from application.export_service import ExportService
 from application.notification_service import NotificationService
 from application.review_service import ReviewService
 from application.settings_service import SettingsService
-from application.translation_test_service import TranslationTestService
 from application.vocab_service import VocabService
 from application.word_service import WordManagementService
 from application.wotd_service import WOTDService
@@ -72,5 +71,5 @@ def create_vocab_service(
         export_service=ExportService(word_repo, settings, write_vocabulary_csv),
         wotd_service=WOTDService(settings, wotd_repo, words, translation_service, LocalWordSource()),
         notification_service=NotificationService(reviews, words, write_current_phrase),
-        translation_test_service=TranslationTestService(translation_service),
+        _translator=translation_service,
     )

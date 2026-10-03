@@ -431,7 +431,10 @@ def test_application_startup_settings_and_shutdown(tmp_path, monkeypatch, icon_u
     assert write_config(config_file, {"data_dir": str(tmp_path / "library")})
     tray = MagicMock()
     monkeypatch.setattr(vocab_gui, "_create_tray", lambda: tray)
-    monkeypatch.setattr(vocab_gui.VocabApp, "notify", MagicMock())
+    notify = MagicMock(return_value=True)
+    monkeypatch.setattr(vocab_gui, "send_notification", notify)
+    show_error = MagicMock()
+    monkeypatch.setattr(vocab_gui, "show_message", show_error)
     # Broadway without a browser client has no useful monitor work area.
     monkeypatch.setattr("windows.word_browser.Gdk.Display.get_default", lambda: None)
     monkeypatch.setattr("windows.settings.AutostartManager.enable", lambda: None)
@@ -444,6 +447,7 @@ def test_application_startup_settings_and_shutdown(tmp_path, monkeypatch, icon_u
     def exercise():
         try:
             assert app.scheduler.running
+            monkeypatch.setattr(app.vocab_service.notification_service, "_write_phrase", MagicMock())
             windows_before = set(Gtk.Window.list_toplevels())
             app.on_pause()
             assert app.scheduler.paused
@@ -466,6 +470,14 @@ def test_application_startup_settings_and_shutdown(tmp_path, monkeypatch, icon_u
             app._windows["browser"].lang_combo.set_active_id("fr")
             app._windows["browser"].on_refresh(None)
             assert app._windows["browser"].words[0].translation == "bonjour"
+            app.on_show_next()
+            assert app.vocab_service.review_service.get_stats()["total_reviews"] == 1
+            app.vocab_service.word_service.add_word("Goodbye", "au revoir", target_lang="fr")
+            notify.return_value = False
+            app.on_show_next()
+            show_error.assert_called_once_with(None, Gtk.MessageType.ERROR, "Could not send word notification")
+            assert app.vocab_service.review_service.get_stats()["total_reviews"] == 1
+            assert app.vocab_service.review_service.get_next_word().phrase == "Goodbye"
         except Exception as exc:
             errors.append(exc)
         finally:

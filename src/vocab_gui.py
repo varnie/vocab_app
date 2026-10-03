@@ -17,6 +17,7 @@ from config import GNOME_TRAY_WARNING_KEY
 from constants import CONFIG_FILE, ICONS_DIR, IS_LINUX, IS_MACOS
 from infrastructure.current_phrase import write_current_phrase
 from infrastructure.notifications import send_notification
+from windows import show_message
 from windows.add_word import AddWordDialog
 from windows.settings import SettingsWindow
 from windows.stats import StatsWindow
@@ -176,13 +177,18 @@ class VocabApp(Gtk.Application):
         self._windows[key] = None
 
     @staticmethod
-    def notify(body: str, title: str = "") -> None:
+    def notify(body: str, title: str = "") -> bool:
         """Send notification with icon."""
-        send_notification(body, title)
+        return send_notification(body, title)
 
     def on_show_next(self, widget=None) -> None:
         """Show next word immediately."""
-        word = self.scheduler.on_show_next()
+        try:
+            word = self.scheduler.on_show_next()
+        except Exception as error:
+            logger.exception("Could not show next word")
+            show_message(None, Gtk.MessageType.ERROR, str(error))
+            return
         if word:
             self.tray.set_label(str(word.phrase)[:20])
         else:

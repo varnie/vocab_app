@@ -5,50 +5,16 @@ import tempfile
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
 
 from infrastructure.csv_export import write_vocabulary_csv
-from infrastructure.models import Base
+from repositories.sqlite import SQLiteDatabase
 
 
 @pytest.fixture
-def in_memory_engine():
-    """Create in-memory SQLite engine for testing."""
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    Base.metadata.create_all(engine)
-    yield engine
-    engine.dispose()
-
-
-@pytest.fixture
-def test_db(in_memory_engine):
-    """Create test database with in-memory SQLite."""
-    engine = in_memory_engine
-    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
-
-    class TestDatabase:
-        def __init__(self):
-            self.engine = engine
-            self._session = session_factory()
-
-        @property
-        def session(self) -> Session:
-            return self._session
-
-        def commit(self):
-            self._session.commit()
-
-        def rollback(self):
-            self._session.rollback()
-
-        def close(self):
-            self._session.close()
-
-        def remove_session(self):
-            pass
-
-    db = TestDatabase()
+def test_db(tmp_path):
+    """Use production connection settings and transactions in an isolated database."""
+    db = SQLiteDatabase(str(tmp_path / "vocab.db"))
+    db.connect()
     yield db
     db.close()
 
@@ -107,7 +73,6 @@ def vocab_service(
 ):
     """Create VocabService with all test dependencies."""
     from application.notification_service import NotificationService
-    from application.translation_test_service import TranslationTestService
     from application.vocab_service import VocabService
     from application.wotd_service import WOTDService
 
@@ -122,7 +87,7 @@ def vocab_service(
             settings_service, MagicMock(), word_service, mock_translation_service, MagicMock(),
         ),
         notification_service=NotificationService(review_service, word_service, MagicMock()),
-        translation_test_service=TranslationTestService(mock_translation_service),
+        _translator=mock_translation_service,
     )
 
 

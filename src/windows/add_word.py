@@ -135,10 +135,9 @@ class AddWordDialog(BaseWindow):
             self.destroy()
 
         self.run_background(
-            lambda: self.vocab_service.word_service.add_word(
+            lambda: self.vocab_service.word_service.prepare_word(
                 word, translation, auto_translate=auto_translate,
                 target_lang=self.target_lang, source_lang=self.source_lang,
-                persist=False,
             ), complete
         )
 

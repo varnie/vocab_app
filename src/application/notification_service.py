@@ -1,12 +1,9 @@
 """Notification service - handles notification logic."""
 
-from typing import Callable
+from collections.abc import Callable
 
-from application.service_interfaces import (
-    AbstractNotificationService,
-    AbstractReviewService,
-    AbstractWordManagementService,
-)
+from application.review_service import ReviewService
+from application.word_service import WordManagementService
 from domain.entities import Word
 
 
@@ -19,13 +16,13 @@ def format_word_body(phrase: str, translation: str | None, abbrev: str | None) -
     return body
 
 
-class NotificationService(AbstractNotificationService):
+class NotificationService:
     """Service for notification operations."""
 
     def __init__(
         self,
-        review_service: AbstractReviewService,
-        word_service: AbstractWordManagementService,
+        review_service: ReviewService,
+        word_service: WordManagementService,
         write_phrase: Callable[[str], None],
     ):
         self._review = review_service
@@ -38,16 +35,17 @@ class NotificationService(AbstractNotificationService):
         abbrev = self._word.get_language_abbreviation(trans_lang) if trans_lang else "—"
         return format_word_body(word.phrase, translation, abbrev)
 
-    def build_for_word(self, word: Word) -> str:
-        """Build a notification body, track the phrase and mark reviewed."""
+    def show_word(self, word: Word, send: Callable[[str], bool]) -> None:
+        """Record an exposure only after the OS accepts the notification."""
         body = self.format_for_word(word)
-        self._write_phrase(word.phrase)
+        if not send(body):
+            raise RuntimeError("Could not send word notification")
         self._review.review_word(word.id)
-        return body
+        self._write_phrase(word.phrase)
 
-    def get_next_word_notification(self) -> str | None:
-        """Get next word notification body."""
+    def show_next(self, send: Callable[[str], bool]) -> Word | None:
+        """Select and show the next eligible word, or return None for an empty queue."""
         word = self._review.get_next_word()
-        if not word:
-            return None
-        return self.build_for_word(word)
+        if word:
+            self.show_word(word, send)
+        return word

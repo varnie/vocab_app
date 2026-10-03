@@ -12,7 +12,7 @@ A lightweight vocabulary learning app with system tray and spaced repetition. Su
 - **Stats dashboard**: See words learned, streak, reviews today
 - **Word Browser**: View, search, edit and delete all words
 - **Words Added Today**: Quick view of today's vocabulary
-- **Word of the Day**: Daily vocabulary boost with CEFR-level words (A1-C2)
+- **Word of the Day**: English CEFR vocabulary (A1-C2), translated into your target language
 - **Autostart**: Automatically starts on login
 - **Multiple languages**: Support for 9 target languages
 - **Custom data directory**: Store database anywhere (e.g., Dropbox for sync)
@@ -56,8 +56,16 @@ This will create a virtual environment and install all dependencies:
 - `requests` - HTTP library
 - `sqlalchemy` - Database ORM
 - `deep-translator` - Translation library
-- `pytest` - Testing framework
-- `pytest-cov` - Coverage reports
+
+Python 3.10 or newer is required. Test dependencies are installed separately:
+
+```bash
+venv/bin/python -m pip install -r requirements-dev.txt
+venv/bin/python -m pytest
+```
+
+Runtime dependencies are maintained in `requirements.txt`; project metadata reads
+the same file.
 
 #### Platform-specific dependencies
 
@@ -73,6 +81,31 @@ This will create a virtual environment and install all dependencies:
 source venv/bin/activate
 python3 src/vocab_gui.py
 ```
+
+### Version and releases
+
+`VERSION` stores the release number, currently `1.0.0`. Settings and the CLI also
+show the checkout commit, for example `1.0.0+gbda9b35.dirty`. The `dirty` suffix
+means there are staged, unstaged, or untracked changes; ignored files do not count.
+Source copies without Git display only the release number.
+
+```bash
+venv/bin/python src/vocab_cli.py --version
+```
+
+For a release, update `VERSION`: increment the patch number for fixes, the minor
+number for new features, or the major number for incompatible changes. Run the
+tests and commit the changes. Tag that commit with the same version prefixed by
+`v`, then push the commit and tag. For example, after setting `VERSION` to `1.0.1`:
+
+```bash
+git tag -a v1.0.1 -m "Release 1.0.1"
+git push origin HEAD v1.0.1
+```
+
+CI rejects a release tag that disagrees with `VERSION`. It runs checks without
+changing the version or creating commits. Package metadata uses the release
+number from `VERSION`, without the checkout suffix.
 
 ### Keyboard Shortcuts
 
@@ -108,6 +141,9 @@ Configure via System Settings → Keyboard → Shortcuts → Services, or use to
 
 ### Everyday use
 
+- A word counts as shown only after the system accepts its notification. Failed
+  delivery leaves it eligible for review. Word of the Day also remains available
+  for a later attempt if its notification fails.
 - **Save** uses your entered translation, or translates an empty field. Choose
   **Save without translation** to keep an untranslated entry explicitly.
 - Translation runs in the background, with duplicate submissions disabled. Each

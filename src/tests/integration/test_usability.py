@@ -39,12 +39,13 @@ def test_unicode_duplicates_and_literal_search(word_service, word_repo):
     assert word_repo.get_by_phrase("école_100%") is None
 
 
-def test_saved_translation_skips_network_unless_forced(word_service, mock_translation_service):
+def test_saved_translation_skips_network_but_preview_refreshes(word_service, mock_translation_service):
     word_service.add_word("Hello", "Original")
     assert word_service.add_word("hello", auto_translate=True).translation == "Original"
     mock_translation_service.translate.assert_not_called()
-    word_service.add_word("hello", auto_translate=True, force_translate=True)
+    word_service.translate_preview("hello", "ru", "en")
     mock_translation_service.translate.assert_called_once()
+    assert word_service.get_words()[0].translation == "Original"
 
 
 def test_language_is_captured_before_translation(word_service, word_repo, settings_service):
@@ -213,9 +214,13 @@ def test_scheduler_records_exposure_and_releases_real_sqlite_session(library, mo
         session_states.append(library._db.ScopedSession.registry.has())
         released.set()
 
+    def notify(body):
+        notifications.append(body)
+        return True
+
     scheduler = ReviewScheduler(
         library.review_service, library.wotd_service, library.settings_service,
-        lambda body: notifications.append(body), lambda _: None,
+        notify, lambda _: None,
         library.notification_service, lambda _: None, cleanup,
     )
     scheduler.start()
@@ -239,7 +244,7 @@ def test_invalid_language_does_not_rename(word_service, word_repo):
 
 def test_translation_worker_round_trip_and_termination(tmp_path, monkeypatch):
     from domain.exceptions import TranslationError
-    from infrastructure.translation import GoogleDeepTranslatorProvider
+    from infrastructure.translation import TranslationServiceImpl
 
     # A local provider double keeps the real process/pipe/deadline path offline.
     module = tmp_path / "deep_translator.py"
@@ -253,10 +258,10 @@ def test_translation_worker_round_trip_and_termination(tmp_path, monkeypatch):
         "MyMemoryTranslator = GoogleTranslator\n"
     )
     monkeypatch.setenv("PYTHONPATH", str(tmp_path))
-    provider = GoogleDeepTranslatorProvider()
-    assert provider.translate("École", "fr", "en") == "Bonjour — École"
+    provider = TranslationServiceImpl()
+    assert provider.translate("École", "fr", "en", "google_deep", allow_fallback=False) == "Bonjour — École"
     monkeypatch.setattr("infrastructure.translation.TRANSLATION_TIMEOUT_SECONDS", 0.3)
     started = time.monotonic()
     with pytest.raises(TranslationError, match="timed out"):
-        provider.translate("slow", "fr", "en")
+        provider.translate("slow", "fr", "en", "google_deep", allow_fallback=False)
     assert time.monotonic() - started < 5

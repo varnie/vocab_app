@@ -184,6 +184,7 @@ class TestLocalWordSource:
 
 
 def test_wotd_uses_selected_language(word_service, settings_service):
+    settings_service.set_setting("source_lang", "fr")
     settings_service.set_setting("target_lang", "ru")
     word_service.add_word("hello", "privet")
     settings_service.set_setting("target_lang", "es")
@@ -196,10 +197,15 @@ def test_wotd_uses_selected_language(word_service, settings_service):
     source.get_word.return_value = {"word": "hello", "level": "A1"}
     service = WOTDService(settings_service, repo, word_service, translator, source)
 
-    word = service.get_word_of_the_day()
+    word, level = service.get_word_of_the_day()
 
+    translator.translate.assert_called_once_with("hello", "es", "en", "mymemory")
     assert word.translation == "hola"
     assert word.language_code == "es"
+    assert level == "A1"
+    repo.mark_shown.assert_not_called()
+    service.mark_shown(word, level)
+    repo.mark_shown.assert_called_once_with("hello", "A1")
     repo.get_today.return_value = WOTDHistory(word="hello", level="A1")
     assert service.get_today_display() == ("hello", "hola", "A1")
     settings_service.set_setting("target_lang", "ru")

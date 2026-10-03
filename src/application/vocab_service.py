@@ -2,16 +2,13 @@
 
 from dataclasses import dataclass
 
-from application.service_interfaces import (
-    AbstractExportService,
-    AbstractNotificationService,
-    AbstractReviewService,
-    AbstractSettingsService,
-    AbstractWordManagementService,
-    AbstractWOTDService,
-    SessionLifecycle,
-)
-from application.translation_test_service import TranslationTestService
+from application.export_service import ExportService
+from application.notification_service import NotificationService
+from application.review_service import ReviewService
+from application.service_interfaces import AbstractTranslationService, SessionLifecycle
+from application.settings_service import SettingsService
+from application.word_service import WordManagementService
+from application.wotd_service import WOTDService
 from domain.entities import Language
 from domain.repositories import AbstractLanguageRepository
 
@@ -22,13 +19,13 @@ class VocabService:
 
     _db: SessionLifecycle
     language_repo: AbstractLanguageRepository
-    word_service: AbstractWordManagementService
-    review_service: AbstractReviewService
-    settings_service: AbstractSettingsService
-    export_service: AbstractExportService
-    wotd_service: AbstractWOTDService
-    notification_service: AbstractNotificationService
-    translation_test_service: TranslationTestService
+    word_service: WordManagementService
+    review_service: ReviewService
+    settings_service: SettingsService
+    export_service: ExportService
+    wotd_service: WOTDService
+    notification_service: NotificationService
+    _translator: AbstractTranslationService
 
     def close(self) -> None:
         self._db.close()
@@ -49,6 +46,9 @@ class VocabService:
         source_lang = source_lang or self.settings_service.get_source_lang()
         target_lang = target_lang or self.settings_service.get_target_lang()
         provider_name = provider_name or self.settings_service.get_translation_provider()
-        return self.translation_test_service.test_connection(
-            source_lang, target_lang, provider_name
-        )
+        try:
+            return bool(self._translator.translate(
+                "hello", target_lang, source_lang, provider_name, allow_fallback=False,
+            ))
+        except Exception:
+            return False

@@ -28,7 +28,7 @@ from constants import DEFAULT_DATA_DIR, IS_MACOS
 from infrastructure.autostart import AutostartManager
 from infrastructure.config_file import read_config, write_config
 from infrastructure.data_relocation import PENDING_RELOCATION_KEY, DataDirChoice, RelocationVerdict, relocate_database
-from infrastructure.translation import ProviderRegistry
+from infrastructure.translation import PROVIDERS
 from version import get_version
 from windows import BaseWindow, labelled_row, pack_button, padded_box
 
@@ -130,12 +130,12 @@ class SettingsWindow(BaseWindow):
 
         # Provider
         self.provider_combo = Gtk.ComboBoxText()
-        for provider, name in ProviderRegistry.list_providers():
+        for provider, name in PROVIDERS.items():
             self.provider_combo.append(provider, name)
 
         # Preserve supported providers; fall back only for unknown/legacy IDs.
         current_provider = self.vocab_service.settings_service.get_translation_provider()
-        if current_provider not in [p[0] for p in ProviderRegistry.list_providers()]:
+        if current_provider not in PROVIDERS:
             current_provider = DEFAULT_TRANSLATION_PROVIDER  # Default if not found
 
         self.provider_combo.set_active_id(current_provider)
@@ -283,7 +283,7 @@ class SettingsWindow(BaseWindow):
         source_lang = self.src_lang_combo.get_active_id()
         target_lang = self.lang_combo.get_active_id()
 
-        provider_name = ProviderRegistry.get(provider).get_name()
+        provider_name = PROVIDERS[provider]
         self.test_status_label.set_text(f"Testing {provider_name}...")
         self.test_spinner.show()
         self.test_spinner.start()

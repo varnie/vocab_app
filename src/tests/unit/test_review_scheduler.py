@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from application.notification_service import NotificationService
 from application.review_scheduler import ReviewScheduler
 from domain.entities import Word
 
@@ -20,7 +21,12 @@ def scheduler():
     review.get_next_word.return_value = Word(phrase="Hello", translation="bonjour")
     wotd = MagicMock()
     wotd.get_word_of_the_day.return_value = None
-    return ReviewScheduler(review, wotd, settings, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock())
+    words = MagicMock()
+    words.get_translation_with_lang.return_value = ("bonjour", "fr")
+    notification = NotificationService(review, words, MagicMock())
+    return ReviewScheduler(
+        review, wotd, settings, MagicMock(return_value=True), MagicMock(), notification, MagicMock(), MagicMock(),
+    )
 
 
 def test_settings_change_before_wait_is_not_lost(scheduler):
@@ -134,7 +140,7 @@ def test_change_during_selection_discards_stale_word(scheduler):
 
     scheduler.review_service.get_next_word.side_effect = select
     scheduler._review_once(None, generation)
-    scheduler._notification_service.build_for_word.assert_not_called()
+    scheduler._notification_service._write_phrase.assert_not_called()
     scheduler._notify.assert_not_called()
     scheduler.stop()
 
@@ -160,7 +166,7 @@ def test_stop_waits_for_inflight_wotd_and_discards_late_notification(scheduler, 
     def get_word():
         entered.set()
         assert release.wait(2)
-        return Word(phrase="late word", translation="late translation")
+        return Word(phrase="late word", translation="late translation"), "A1"
 
     def stop():
         scheduler.stop()
@@ -183,6 +189,26 @@ def test_stop_waits_for_inflight_wotd_and_discards_late_notification(scheduler, 
     assert not scheduler._wotd_thread.is_alive()
     scheduler._notify.assert_not_called()
     scheduler._write_phrase.assert_not_called()
+    scheduler.wotd_service.mark_shown.assert_not_called()
+    scheduler._cleanup_session.assert_called_once()
+
+
+@pytest.mark.parametrize("outcome", [True, False, OSError("delivery failed")])
+def test_wotd_consumes_day_only_after_delivery(scheduler, outcome):
+    scheduler.running = True
+    word = Word(phrase="hello", translation="bonjour")
+    scheduler.wotd_service.get_word_of_the_day.return_value = (word, "A1")
+    if isinstance(outcome, Exception):
+        scheduler._notify.side_effect = outcome
+    else:
+        scheduler._notify.return_value = outcome
+    scheduler._check_wotd()
+    if outcome is True:
+        scheduler.wotd_service.mark_shown.assert_called_once_with(word, "A1")
+        scheduler._write_phrase.assert_called_once_with("hello")
+    else:
+        scheduler.wotd_service.mark_shown.assert_not_called()
+        scheduler._write_phrase.assert_not_called()
     scheduler._cleanup_session.assert_called_once()
 
 

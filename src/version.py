@@ -1,18 +1,20 @@
-#!/usr/bin/env python3
-"""Version info - read from VERSION file."""
+"""Application version is the short HEAD commit hash, nothing else."""
 
-import os
+import subprocess
+from pathlib import Path
 
-VERSION_FILE = os.path.join(os.path.dirname(os.path.dirname(str(__file__))), "VERSION")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def get_version():
-    """Read version from VERSION file."""
+def get_version() -> str:
+    """Return the short commit hash, or 'unknown' when Git is unavailable."""
     try:
-        with open(VERSION_FILE) as f:
-            return f.read().strip()
-    except FileNotFoundError:
+        return subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "--short=7", "HEAD"],  # ruff: ignore[start-process-with-partial-path] - optional Git from PATH
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=1,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
         return "unknown"
-
-
-__version__ = get_version()

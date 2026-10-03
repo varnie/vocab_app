@@ -1,13 +1,14 @@
 """Edit one word and preview translations before saving."""
 
-from typing import Callable
+from collections.abc import Callable
 
 import gi
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from application.service_interfaces import AbstractSettingsService, AbstractWordManagementService
+from application.settings_service import SettingsService
+from application.word_service import WordManagementService
 from domain.entities import Word
 from windows import set_margins
 
@@ -18,8 +19,8 @@ class EditWordDialog(Gtk.Dialog):
         parent: Gtk.Window,
         word: Word,
         target_lang: str,
-        word_service: AbstractWordManagementService,
-        settings_service: AbstractSettingsService,
+        word_service: WordManagementService,
+        settings_service: SettingsService,
         run_background: Callable,
     ) -> None:
         super().__init__(

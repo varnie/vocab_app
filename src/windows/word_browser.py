@@ -39,7 +39,8 @@ class WordBrowserWindow(BaseWindow):
         monitor = display.get_primary_monitor() or display.get_monitor(0) if display else None
         if monitor:
             area = monitor.get_workarea()
-            self.set_default_size(min(910, area.width - 40), min(600, area.height - 60))
+            if area.width > 40 and area.height > 60:
+                self.set_default_size(min(910, area.width - 40), min(600, area.height - 60))
         self.vocab_service = vocab_service
         self.selected_word_id: int | None = None
         self.words: list[Word] = []

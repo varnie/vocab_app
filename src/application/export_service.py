@@ -1,19 +1,19 @@
 """Export service - handles all export operations."""
 
-from typing import Callable
+from collections.abc import Callable
 
-from application.service_interfaces import AbstractExportService, AbstractSettingsService
+from application.settings_service import SettingsService
 from domain.entities import Word
 from domain.repositories import AbstractWordRepository
 
 
-class ExportService(AbstractExportService):
+class ExportService:
     """Service for exporting words to various formats."""
 
     def __init__(
         self,
         word_repo: AbstractWordRepository,
-        settings_service: AbstractSettingsService,
+        settings_service: SettingsService,
         write_csv: Callable[[str, list[Word], str], None],
     ) -> None:
         self.word_repo = word_repo

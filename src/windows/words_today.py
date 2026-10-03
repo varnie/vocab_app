@@ -82,7 +82,7 @@ class WordsTodayWindow(BaseWindow):
         """Keep both columns readable without horizontal scrolling."""
         available = max(2, allocation.width - 4)
         word_width = int(available * 0.38)
-        for (column, renderer), width in zip(self._columns, (word_width, available - word_width)):
+        for (column, renderer), width in zip(self._columns, (word_width, available - word_width), strict=True):
             width = max(1, width)
             wrap_width = max(1, width - 24)
             if renderer.get_property("wrap-width") != wrap_width:

@@ -3,15 +3,12 @@
 import logging
 import threading
 import time
-from typing import Callable
+from collections.abc import Callable
 
-from application.notification_service import format_word_body
-from application.service_interfaces import (
-    AbstractNotificationService,
-    AbstractReviewService,
-    AbstractSettingsService,
-    AbstractWOTDService,
-)
+from application.notification_service import NotificationService, format_word_body
+from application.review_service import ReviewService
+from application.settings_service import SettingsService
+from application.wotd_service import WOTDService
 from config import PAUSED_KEY
 
 logger = logging.getLogger(__name__)
@@ -31,12 +28,12 @@ class ReviewScheduler:
 
     def __init__(
         self,
-        review_service: AbstractReviewService,
-        wotd_service: AbstractWOTDService,
-        settings_service: AbstractSettingsService,
-        notify_callback: Callable[..., None],
+        review_service: ReviewService,
+        wotd_service: WOTDService,
+        settings_service: SettingsService,
+        notify_callback: Callable[..., bool],
         label_callback: Callable[[str], None],
-        notification_service: AbstractNotificationService,
+        notification_service: NotificationService,
         write_phrase: Callable[[str], None],
         cleanup_callback: Callable[[], None] | None = None,
     ) -> None:
@@ -110,14 +107,7 @@ class ReviewScheduler:
 
     def on_show_next(self):
         """Show a word on explicit user request, even during a pause."""
-        word = self.review_service.get_next_word()
-        if word:
-            self._show_word_popup(word)
-        return word
-
-    def _show_word_popup(self, word) -> None:
-        body = self._notification_service.build_for_word(word)
-        self._notify(body)
+        return self._notification_service.show_next(self._notify)
 
     def _check_wotd(self) -> None:
         try:
@@ -126,11 +116,13 @@ class ReviewScheduler:
                     return
             if self.notifications_paused():
                 return
-            word = self.wotd_service.get_word_of_the_day()
+            candidate = self.wotd_service.get_word_of_the_day()
             with self._state:
-                if word and self.running and not self.notifications_paused():
-                    self._write_phrase(word.phrase)
-                    self._notify(format_word_body(word.phrase, word.translation, None), "Word of the Day")
+                if candidate and self.running and not self.notifications_paused():
+                    word, level = candidate
+                    if self._notify(format_word_body(word.phrase, word.translation, None), "Word of the Day"):
+                        self.wotd_service.mark_shown(word, level)
+                        self._write_phrase(word.phrase)
         except Exception:
             logger.exception("WOTD error")
         finally:
@@ -185,7 +177,7 @@ class ReviewScheduler:
         word = self.review_service.get_next_word()
         with self._state:
             if word and self.running and generation == self._generation:
-                self._show_word_popup(word)
+                self._notification_service.show_word(word, self._notify)
                 self._update_label(str(word.phrase)[:20])
                 last_shown = time.monotonic()
                 return last_shown, last_shown + interval

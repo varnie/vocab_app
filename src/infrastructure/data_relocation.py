@@ -2,9 +2,9 @@
 
 import os
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Callable
 
 from config import DATA_DIR_KEY
 from constants import DEFAULT_DB_PATH

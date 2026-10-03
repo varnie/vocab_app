@@ -2,6 +2,7 @@
 """CLI module for vocab app."""
 
 import argparse
+import logging
 import sys
 from datetime import datetime
 
@@ -10,11 +11,13 @@ from constants import CONFIG_FILE
 from infrastructure.clipboard import get_clipboard_text
 from infrastructure.current_phrase import clear_current_phrase, read_current_phrase, write_current_phrase
 from infrastructure.notifications import send_notification
+from version import get_version
 
 
 def run_cli():
     """Handle CLI actions (for desktop hotkeys)."""
     parser = argparse.ArgumentParser()
+    parser.add_argument("--version", action="version", version=f"%(prog)s {get_version()}")
     parser.add_argument("--save", action="store_true", help="Save word from selection")
     parser.add_argument("--delete", action="store_true", help="Delete current word")
     parser.add_argument("--next", action="store_true", help="Show next word")
@@ -58,10 +61,12 @@ def run_cli():
                 clear_current_phrase()
 
         if args.next:
-            body = vocab_service.notification_service.get_next_word_notification()
-            if body:
-                send_notification(body)
-            else:
+            try:
+                word = vocab_service.notification_service.show_next(send_notification)
+            except Exception:
+                logging.getLogger(__name__).exception("Could not show next word")
+                return False
+            if word is None:
                 timestamp = vocab_service.review_service.next_available_at()
                 if isinstance(timestamp, (int, float)):
                     when = datetime.fromtimestamp(timestamp).strftime("%d %b, %H:%M")

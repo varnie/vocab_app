@@ -13,9 +13,9 @@ from domain.time_utils import local_today_start_ts
     ("manual", True, "manual"),
 ])
 def test_prepare_word_does_not_persist(word_service, word_repo, translation, auto_translate, expected):
-    word = word_service.add_word(
+    word = word_service.prepare_word(
         "  Hello  ", translation, auto_translate=auto_translate,
-        target_lang="fr", source_lang="en", persist=False,
+        target_lang="fr", source_lang="en",
     )
     assert word.phrase == "Hello"
     assert word.translation == expected
@@ -27,18 +27,16 @@ def test_prepare_word_does_not_persist(word_service, word_repo, translation, aut
         word_service.translation_service.translate.assert_not_called()
 
 
-@pytest.mark.parametrize("force_translate", [False, True])
-def test_prepare_existing_word_preserves_cached_translation(word_service, word_repo, force_translate):
+def test_prepare_existing_word_preserves_cached_translation(word_service, word_repo):
     original = word_service.add_word("Hello", "cached", target_lang="fr")
-    word = word_service.add_word(
-        "hello", auto_translate=True, force_translate=force_translate, target_lang="fr", persist=False,
+    word = word_service.prepare_word(
+        "hello", auto_translate=True, target_lang="fr",
     )
-    assert word.translation == ("тест" if force_translate else "cached")
+    assert word.translation == "cached"
     assert word.language_code == "fr"
-    if not force_translate:
-        assert word.id == original.id
-        assert word.phrase == "Hello"
-        word_service.translation_service.translate.assert_not_called()
+    assert word.id == original.id
+    assert word.phrase == "Hello"
+    word_service.translation_service.translate.assert_not_called()
     assert word_repo.get_translation(original.id, "fr").translation == "cached"
 
 
@@ -49,9 +47,10 @@ def test_empty_auto_translation_does_not_change_existing_word(word_service, word
     original = word_service.add_word("Hello", "cached")
     word_service.translation_service.translate.return_value = translation
     with pytest.raises(TranslationError, match="returned no result"):
-        word_service.add_word("hello", auto_translate=True, force_translate=True)
+        word_service.add_word("hello", auto_translate=True, target_lang="fr")
     assert word_repo.get_by_phrase("Hello").phrase == "Hello"
     assert word_repo.get_translation(original.id, "ru").translation == "cached"
+    assert word_repo.get_translation(original.id, "fr") is None
 
 
 class TestWordManagementService:
