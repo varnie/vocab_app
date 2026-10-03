@@ -130,6 +130,46 @@ def test_three_errors_stop_workers_and_release_failed_sessions(scheduler, monkey
     assert not scheduler.running
 
 
+@pytest.mark.parametrize("failure", [False, OSError("notification service unavailable")])
+def test_delivery_recovers_after_more_than_three_failures(
+    scheduler, monkeypatch, word_service, review_service, failure,
+):
+    word = word_service.add_word("hello", "привет")
+    write_phrase = MagicMock()
+    scheduler.review_service = review_service
+    scheduler._notification_service = NotificationService(review_service, word_service, write_phrase)
+    scheduler._notify.side_effect = [failure] * 4 + [True]
+    scheduler.running = True
+    monkeypatch.setattr("application.review_scheduler.REVIEW_INITIAL_DELAY_SECONDS", 0)
+    monkeypatch.setattr("application.review_scheduler.time.monotonic", lambda: 100.0)
+    waits = []
+
+    def wait(deadline, generation=None):
+        if generation is None:
+            return True
+        assert scheduler.running
+        assert scheduler._cleanup_session.call_count == len(waits) + 1
+        waits.append(deadline)
+        if len(waits) <= 4:
+            assert deadline == 160.0
+            assert review_service.get_stats()["total_reviews"] == 0
+            assert review_service.get_next_word().id == word.id
+            write_phrase.assert_not_called()
+            scheduler._update_label.assert_not_called()
+        else:
+            assert deadline == 175.0
+            scheduler.stop()
+        return True
+
+    monkeypatch.setattr(scheduler, "_wait_until", wait)
+    scheduler._review_loop()
+    assert len(waits) == 5
+    assert review_service.get_stats()["total_reviews"] == 1
+    assert review_service.get_next_word() is None
+    write_phrase.assert_called_once_with("hello")
+    scheduler._update_label.assert_called_once_with("hello")
+
+
 def test_change_during_selection_discards_stale_word(scheduler):
     scheduler.running = True
     generation = scheduler._generation

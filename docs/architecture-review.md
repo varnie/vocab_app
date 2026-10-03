@@ -165,10 +165,15 @@ cover failed notification delivery, unchanged review eligibility, GUI and CLI
 delivery handling, WOTD language selection, and deferred WOTD history.
 
 Runtime dependencies live in `requirements.txt`; `requirements-dev.txt` adds the
-test tools. Project metadata reads runtime dependencies and `VERSION` from those
-files. Version changes are manual release changes; the workflow that committed
-and force-pushed a SHA after each push has been removed. Ruff targets Python 3.10,
-matching the declared minimum version.
+test tools. Project metadata reads runtime dependencies from `requirements.txt`
+and encodes the HEAD commit as `0+g<hash>` through `version.py`. Builds
+without Git use `0+unknown`. GUI and CLI display the bare short commit hash or
+`unknown`. The workflow that committed and force-pushed a SHA after each push
+has been removed. Ruff targets Python 3.10, matching the declared minimum version.
+
+Review notification delivery failures retry after one minute without stopping review
+or WOTD workers. The failed word remains eligible and its history is unchanged.
+Other review errors still stop the scheduler after three consecutive failures.
 
 Validation: 244 core tests passed, with 23 opt-in tests skipped. The isolated
 Broadway run passed 21 GUI tests with `G_DEBUG=fatal-criticals`; one screenshot

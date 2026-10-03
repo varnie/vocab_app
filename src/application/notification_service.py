@@ -5,6 +5,7 @@ from collections.abc import Callable
 from application.review_service import ReviewService
 from application.word_service import WordManagementService
 from domain.entities import Word
+from domain.exceptions import NotificationDeliveryError
 
 
 def format_word_body(phrase: str, translation: str | None, abbrev: str | None) -> str:
@@ -38,8 +39,12 @@ class NotificationService:
     def show_word(self, word: Word, send: Callable[[str], bool]) -> None:
         """Record an exposure only after the OS accepts the notification."""
         body = self.format_for_word(word)
-        if not send(body):
-            raise RuntimeError("Could not send word notification")
+        try:
+            delivered = send(body)
+        except Exception as error:
+            raise NotificationDeliveryError("Could not send word notification") from error
+        if not delivered:
+            raise NotificationDeliveryError("Could not send word notification")
         self._review.review_word(word.id)
         self._write_phrase(word.phrase)
 

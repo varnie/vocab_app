@@ -1,4 +1,4 @@
-"""Application version is the short HEAD commit hash, nothing else."""
+"""Runtime commit hash and Python package version for the current checkout."""
 
 import subprocess
 from pathlib import Path
@@ -18,3 +18,8 @@ def get_version() -> str:
         ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return "unknown"
+
+
+# Package metadata requires a PEP 440 version; GUI/CLI use get_version().
+_commit = get_version()
+__version__ = f"0+g{_commit}" if _commit != "unknown" else "0+unknown"

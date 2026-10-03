@@ -10,6 +10,7 @@ from application.review_service import ReviewService
 from application.settings_service import SettingsService
 from application.wotd_service import WOTDService
 from config import PAUSED_KEY
+from domain.exceptions import NotificationDeliveryError
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,11 @@ class ReviewScheduler:
                 try:
                     last_shown, deadline = self._review_once(last_shown, generation)
                     consecutive_errors = 0
+                except NotificationDeliveryError:
+                    consecutive_errors = 0
+                    logger.warning("Notification delivery failed; retrying in %s seconds", ERROR_RETRY_SECONDS,
+                                   exc_info=True)
+                    deadline = time.monotonic() + ERROR_RETRY_SECONDS
                 except Exception:
                     consecutive_errors += 1
                     logger.exception("Review loop error (%d/%d)", consecutive_errors, MAX_CONSECUTIVE_ERRORS)

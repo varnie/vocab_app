@@ -84,28 +84,16 @@ python3 src/vocab_gui.py
 
 ### Version and releases
 
-`VERSION` stores the release number, currently `1.0.0`. Settings and the CLI also
-show the checkout commit, for example `1.0.0+gbda9b35.dirty`. The `dirty` suffix
-means there are staged, unstaged, or untracked changes; ignored files do not count.
-Source copies without Git display only the release number.
+Settings and the CLI show the short HEAD commit hash, for example `1737034`.
+Local changes do not add a suffix. Source copies without Git show `unknown`.
 
 ```bash
 venv/bin/python src/vocab_cli.py --version
 ```
 
-For a release, update `VERSION`: increment the patch number for fixes, the minor
-number for new features, or the major number for incompatible changes. Run the
-tests and commit the changes. Tag that commit with the same version prefixed by
-`v`, then push the commit and tag. For example, after setting `VERSION` to `1.0.1`:
-
-```bash
-git tag -a v1.0.1 -m "Release 1.0.1"
-git push origin HEAD v1.0.1
-```
-
-CI rejects a release tag that disagrees with `VERSION`. It runs checks without
-changing the version or creating commits. Package metadata uses the release
-number from `VERSION`, without the checkout suffix.
+Python package metadata uses `0+g<hash>`, for example `0+g1737034`, to encode
+the commit in a valid package version. Builds without Git use `0+unknown`.
+CI runs tests without changing versions or creating commits.
 
 ### Keyboard Shortcuts
 
@@ -253,7 +241,6 @@ src/
 │   ├── review_service.py  # Review scheduling
 │   ├── settings_service.py
 │   ├── service_interfaces.py  # Abstract interfaces
-│   ├── translation_test_service.py
 │   ├── vocab_service.py   # Named services and shared database lifecycle
 │   ├── word_service.py    # Word CRUD operations
 │   └── wotd_service.py    # Word of the Day
