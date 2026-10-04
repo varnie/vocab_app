@@ -32,9 +32,6 @@ class AbstractWordRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def add(self, phrase: str) -> Word: ...
-
-    @abstractmethod
     def get_by_phrase(self, phrase: str) -> Word | None: ...
 
     @abstractmethod

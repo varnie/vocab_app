@@ -30,7 +30,7 @@ class TestForeignKeys:
     def test_delete_word_cascades_at_db_level(self, file_db):
         """Raw-SQL parent delete must cascade to translations via FK."""
         repo = WordRepository(file_db)
-        word = repo.add("cascade-me")
+        word = repo.save_word("cascade-me", None, "ru")
         repo.add_translation(word.id, "каскад", "ru")
 
         # Bypass ORM cascades: DB-level ON DELETE CASCADE must clean up.

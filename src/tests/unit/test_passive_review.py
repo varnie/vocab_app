@@ -81,7 +81,7 @@ def test_legacy_timestamp_respects_cooldown(word_service, review_service, test_d
 def test_other_language_does_not_consume_new_slot(word_service, word_repo, test_db):
     due = word_service.add_word("due", "translation")
     unseen = word_service.add_word("unseen", "translation")
-    foreign = word_repo.add("foreign")
+    foreign = word_repo.save_word("foreign", None, "es")
     word_repo.add_translation(foreign.id, "hola", "es")
     expose(test_db, due, 4, NOW - 8 * 86400)
     expose(test_db, foreign, 1, NOW)

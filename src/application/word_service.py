@@ -52,12 +52,9 @@ class WordManagementService:
         draft = self.prepare_word(
             phrase, translation, auto_translate, target_lang=target_lang, source_lang=source_lang,
         )
-        if draft.translation:
-            self.word_repo.save_word(
-                draft.phrase, draft.translation, draft.language_code, overwrite_translation=overwrite_translation,
-            )
-        else:
-            self.word_repo.add(draft.phrase)
+        self.word_repo.save_word(
+            draft.phrase, draft.translation or None, draft.language_code, overwrite_translation=overwrite_translation,
+        )
         return self._get_saved_word(draft.phrase, draft.language_code)
 
     def prepare_word(

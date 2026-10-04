@@ -147,16 +147,6 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
                 result.append(mappers.map_word(row))
         return result
 
-    def add(self, phrase: str) -> Word:
-        """Add a word, return its domain entity."""
-        orm_word = self.db.session.query(ORMWord).filter(func.casefold(ORMWord.phrase) == phrase.casefold()).first()
-        if orm_word:
-            return mappers.map_word(orm_word)
-        orm_word = ORMWord(phrase=phrase)
-        self.db.session.add(orm_word)
-        self.commit()
-        return mappers.map_word(orm_word)
-
     def get_by_phrase(self, phrase: str) -> Word | None:
         """Get word by phrase."""
         orm_word = (

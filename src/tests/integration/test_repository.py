@@ -41,7 +41,7 @@ class TestWordRepositoryIntegration:
     def test_word_crud_full_cycle(self, word_repo):
         """Test full CRUD cycle."""
         # Create
-        word = word_repo.add("testword")
+        word = word_repo.save_word("testword", None, "ru")
         assert word.phrase == "testword"
 
         # Read
@@ -61,7 +61,7 @@ class TestWordRepositoryIntegration:
 
     def test_delete_translation(self, word_repo):
         """Test deleting translation."""
-        word = word_repo.add("todelete")
+        word = word_repo.save_word("todelete", None, "ru")
         word_repo.add_translation(word.id, "удалить", "ru")
 
         word_repo.delete_translation(word.id, "ru")
@@ -71,7 +71,7 @@ class TestWordRepositoryIntegration:
 
     def test_stats_recording(self, word_repo, stats_repo):
         """Test recording review stats."""
-        word = word_repo.add("statstest")
+        word = word_repo.save_word("statstest", None, "ru")
 
         history = stats_repo.record_review(word.id, update_stats=True)
         record = word_repo.get_by_phrase("statstest")
