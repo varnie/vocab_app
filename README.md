@@ -131,7 +131,11 @@ Configure via System Settings → Keyboard → Shortcuts → Services, or use to
 
 - A word counts as shown only after the system accepts its notification. Failed
   delivery leaves it eligible for review. Word of the Day also remains available
-  for a later attempt if its notification fails.
+  for a later attempt if its notification fails. Its candidate is retained across
+  retries and restarts for the current UTC day.
+- Notification commands have a five-second deadline. After three consecutive
+  review errors, the tray menu shows an error status and reviews retry every five
+  minutes. The status clears after recovery; Pause/Resume also wakes the worker.
 - **Save** uses your entered translation, or translates an empty field. Choose
   **Save without translation** to keep an untranslated entry explicitly.
 - Translation runs in the background, with duplicate submissions disabled. Each

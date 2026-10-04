@@ -119,14 +119,30 @@ def test_empty_or_paused_queue_releases_session_every_iteration(scheduler, monke
     scheduler._notify.assert_not_called()
 
 
-def test_three_errors_stop_workers_and_release_failed_sessions(scheduler, monkeypatch):
+def test_database_errors_back_off_and_recover_without_stopping_workers(scheduler, monkeypatch):
     monkeypatch.setattr("application.review_scheduler.REVIEW_INITIAL_DELAY_SECONDS", 0)
     scheduler.running = True
-    scheduler.review_service.get_next_word.side_effect = RuntimeError("database failure")
-    monkeypatch.setattr(scheduler, "_wait_until", lambda *_: True)
+    scheduler.review_service.get_next_word.side_effect = [RuntimeError("database failure")] * 4 + [Word(phrase="hello")]
+    monkeypatch.setattr("application.review_scheduler.time.monotonic", lambda: 100.0)
+    states = []
+    scheduler._error_callback = lambda: states.append(scheduler.recovering)
+    waits = []
+
+    def wait(deadline, generation=None):
+        if generation is None:
+            return True
+        assert scheduler.running
+        waits.append(deadline)
+        if len(waits) == 5:
+            scheduler.stop()
+        return True
+
+    monkeypatch.setattr(scheduler, "_wait_until", wait)
     scheduler._review_loop()
-    assert scheduler.review_service.get_next_word.call_count == 3
-    assert scheduler._cleanup_session.call_count == 3
+    assert waits == [160, 160, 400, 400, 175]
+    assert states == [True, False]
+    assert scheduler._cleanup_session.call_count == 5
+    scheduler._notify.assert_called_once()
     assert not scheduler.running
 
 

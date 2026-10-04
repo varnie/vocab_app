@@ -210,3 +210,45 @@ def test_wotd_uses_selected_language(word_service, settings_service):
     assert service.get_today_display() == ("hello", "hola", "A1")
     settings_service.set_setting("target_lang", "ru")
     assert service.get_today_display() == ("hello", "privet", "A1")
+
+
+def test_failed_delivery_reuses_candidate_across_restart(word_service, settings_service):
+    settings_service.set_setting("wotd_enabled", "true")
+    repo = MagicMock()
+    repo.get_today.return_value = None
+    source = MagicMock()
+    source.get_word.side_effect = [{"word": "hello", "level": "A1"}, {"word": "world", "level": "A1"}]
+    translator = MagicMock()
+    translator.translate.return_value = "привет"
+    first = WOTDService(settings_service, repo, word_service, translator, source)
+    candidate, _ = first.get_word_of_the_day()
+    # No mark_shown: the delivery failed. Recreate the service as on startup.
+    restarted = WOTDService(settings_service, repo, word_service, translator, source)
+    retry, _ = restarted.get_word_of_the_day()
+    assert retry.id == candidate.id
+    assert retry.phrase == "hello"
+    assert len(word_service.get_words()) == 1
+    source.get_word.assert_called_once()
+    translator.translate.assert_called_once()
+    settings_service.set_setting("target_lang", "es")
+    translator.translate.return_value = "hola"
+    changed, _ = restarted.get_word_of_the_day()
+    assert changed.id == candidate.id
+    assert changed.translation == "hola"
+    source.get_word.assert_called_once()
+    assert translator.translate.call_count == 2
+
+
+def test_wotd_candidate_expires_on_new_day(word_service, settings_service, monkeypatch):
+    settings_service.set_setting("wotd_enabled", "true")
+    repo = MagicMock()
+    repo.get_today.return_value = None
+    source = MagicMock()
+    source.get_word.side_effect = [{"word": "hello", "level": "A1"}, {"word": "world", "level": "A1"}]
+    translator = MagicMock()
+    translator.translate.return_value = "перевод"
+    service = WOTDService(settings_service, repo, word_service, translator, source)
+    monkeypatch.setattr("application.wotd_service.today_str", lambda: "2026-10-04")
+    assert service.get_word_of_the_day()[0].phrase == "hello"
+    monkeypatch.setattr("application.wotd_service.today_str", lambda: "2026-10-05")
+    assert service.get_word_of_the_day()[0].phrase == "world"

@@ -5,10 +5,12 @@ import os
 import re
 import shutil
 import subprocess
+from html import unescape
 
 from constants import IS_MACOS
 
 logger = logging.getLogger(__name__)
+NOTIFICATION_TIMEOUT_SECONDS = 5
 
 ICON_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icons", "translate.svg")
 
@@ -28,16 +30,19 @@ def send_notification(body: str, title: str = "") -> bool:
     Returns:
         True if notification was sent successfully
     """
-    if IS_MACOS:
-        return _send_macos_notification(body, title)
-    else:
+    try:
+        if IS_MACOS:
+            return _send_macos_notification(body, title)
         return _send_linux_notification(body, title)
+    except (OSError, subprocess.TimeoutExpired):
+        logger.warning("Could not deliver notification", exc_info=True)
+        return False
 
 
 def _send_macos_notification(body: str, title: str) -> bool:
     """Send notification on macOS."""
-    clean_body = re.sub(r"<[^>]+>", "", body)
-    clean_title = re.sub(r"<[^>]+>", "", title)
+    clean_body = unescape(re.sub(r"<[^>]+>", "", body))
+    clean_title = title
 
     terminal_notifier = shutil.which("terminal-notifier")
     if terminal_notifier:
@@ -45,6 +50,7 @@ def _send_macos_notification(body: str, title: str) -> bool:
             [terminal_notifier, "-title", clean_title, "-message", clean_body],
             capture_output=True,
             check=False,
+            timeout=NOTIFICATION_TIMEOUT_SECONDS,
         )
         return result.returncode == 0
 
@@ -55,7 +61,9 @@ def _send_macos_notification(body: str, title: str) -> bool:
             f'display notification "{_escape_applescript_string(clean_body)}" '
             f'with title "{_escape_applescript_string(clean_title)}"'
         )
-        result = subprocess.run([osascript, "-e", script], check=False)  # ruff:ignore[subprocess-without-shell-equals-true]
+        result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+            [osascript, "-e", script], check=False, timeout=NOTIFICATION_TIMEOUT_SECONDS,
+        )
         return result.returncode == 0
 
     logger.warning("No notification tools available (terminal-notifier or osascript)")
@@ -74,5 +82,7 @@ def _send_linux_notification(body: str, title: str) -> bool:
     if os.path.exists(ICON_PATH):
         args[1:1] = ["-i", ICON_PATH]
 
-    result = subprocess.run(args, check=False)  # ruff:ignore[subprocess-without-shell-equals-true]
+    result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        args, check=False, timeout=NOTIFICATION_TIMEOUT_SECONDS,
+    )
     return result.returncode == 0

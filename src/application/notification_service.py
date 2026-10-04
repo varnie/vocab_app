@@ -1,6 +1,7 @@
 """Notification service - handles notification logic."""
 
 from collections.abc import Callable
+from html import escape
 
 from application.review_service import ReviewService
 from application.word_service import WordManagementService
@@ -10,10 +11,10 @@ from domain.exceptions import NotificationDeliveryError
 
 def format_word_body(phrase: str, translation: str | None, abbrev: str | None) -> str:
     """Build a word notification body."""
-    body = f"<b>{phrase}</b>"
+    body = f"<b>{escape(phrase)}</b>"
     if translation:
-        suffix = f" [{abbrev}]" if abbrev else ""
-        body += f"\n→ {translation}{suffix}"
+        suffix = f" [{escape(abbrev)}]" if abbrev else ""
+        body += f"\n→ {escape(translation)}{suffix}"
     return body
 
 

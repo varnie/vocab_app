@@ -1,5 +1,6 @@
 """WOTD service - handles Word of the Day functionality."""
 
+import json
 import logging
 
 from application.service_interfaces import AbstractTranslationService, WordSource
@@ -9,8 +10,10 @@ from config import DEFAULT_WOTD_LEVEL, WOTD_ENABLED_KEY, WOTD_LEVEL_KEY
 from domain.entities import Word
 from domain.exceptions import TranslationError
 from domain.repositories import AbstractWOTDRepository
+from domain.time_utils import today_str
 
 logger = logging.getLogger(__name__)
+PENDING_WOTD_KEY = "pending_wotd"
 
 
 class WOTDService:
@@ -47,10 +50,20 @@ class WOTDService:
         if self.wotd_repo.get_today():
             return None
 
-        level = self.get_wotd_level()
-        word_data = self.word_source.get_word(level)
-        if not word_data:
-            return None
+        try:
+            word_data = json.loads(self.settings_service.get_setting(PENDING_WOTD_KEY, "null") or "null")
+        except (TypeError, ValueError):
+            word_data = None
+        if not (
+            isinstance(word_data, dict) and word_data.get("date") == today_str()
+            and isinstance(word_data.get("word"), str) and word_data["word"]
+            and isinstance(word_data.get("level"), str)
+        ):
+            word_data = self.word_source.get_word(self.get_wotd_level())
+            if not word_data:
+                return None
+            word_data = {**word_data, "date": today_str()}
+            self.settings_service.set_setting(PENDING_WOTD_KEY, json.dumps(word_data))
 
         word = word_data["word"]
         word_level = word_data["level"]
@@ -59,13 +72,18 @@ class WOTDService:
         source_lang = "en"  # The CEFR word source contains English vocabulary.
         target_lang = self.settings_service.get_target_lang()
 
-        try:
-            translation = self.translation_service.translate(
-                word, target_lang, source_lang, provider_name
-            )
-        except TranslationError:
-            logger.warning("WOTD translation failed for '%s', skipping", word)
-            return None
+        translation = word_data.get("translation") if word_data.get("target_lang") == target_lang else None
+        if not isinstance(translation, str) or not translation:
+            try:
+                translation = self.translation_service.translate(
+                    word, target_lang, source_lang, provider_name
+                )
+            except TranslationError:
+                logger.warning("WOTD translation failed for '%s', skipping", word)
+                return None
+            if translation:
+                word_data.update(translation=translation, target_lang=target_lang)
+                self.settings_service.set_setting(PENDING_WOTD_KEY, json.dumps(word_data))
 
         if not translation:
             return None

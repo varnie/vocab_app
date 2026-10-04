@@ -458,6 +458,16 @@ def test_application_startup_settings_and_shutdown(tmp_path, monkeypatch, icon_u
             assert not app.scheduler.paused
             tray.set_pause_label.assert_called_with("Pause")
             assert set(Gtk.Window.list_toplevels()) == windows_before
+            app.scheduler.recovering = True
+            app.scheduler._error_callback()
+            while GLib.MainContext.default().pending():
+                GLib.MainContext.default().iteration(False)
+            tray.set_pause_label.assert_called_with("Pause (review error; retrying)")
+            app.on_pause()
+            tray.set_pause_label.assert_called_with("Resume (review error; retrying)")
+            app.scheduler.recovering = False
+            app.on_pause()
+            tray.set_pause_label.assert_called_with("Pause")
             app.vocab_service.word_service.add_word("Hello", "bonjour", target_lang="fr")
             app.on_word_browser()
             app.on_settings()

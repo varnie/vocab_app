@@ -107,6 +107,7 @@ class VocabApp(Gtk.Application):
             label_callback=lambda label: GLib.idle_add(self.tray.set_label, label),
             cleanup_callback=self.vocab_service.remove_session,
             notification_service=self.vocab_service.notification_service,
+            error_callback=lambda: GLib.idle_add(self._update_pause_label),
         )
         self.tray.set_pause_label("Resume" if self.scheduler.paused else "Pause")
         self.scheduler.start()
@@ -223,7 +224,13 @@ class VocabApp(Gtk.Application):
     def on_pause(self, widget=None) -> None:
         """Toggle pause/resume reviews."""
         self.scheduler.set_paused(not self.scheduler.paused)
-        self.tray.set_pause_label("Resume" if self.scheduler.paused else "Pause")
+        self._update_pause_label()
+
+    def _update_pause_label(self) -> None:
+        label = "Resume" if self.scheduler.paused else "Pause"
+        if self.scheduler.recovering:
+            label += " (review error; retrying)"
+        self.tray.set_pause_label(label)
 
     def on_settings(self, widget=None) -> None:
         """Show settings window."""

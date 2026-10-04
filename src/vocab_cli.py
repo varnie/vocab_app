@@ -5,6 +5,7 @@ import argparse
 import logging
 import sys
 from datetime import datetime
+from html import escape
 
 from bootstrap import create_vocab_service
 from constants import CONFIG_FILE
@@ -43,21 +44,21 @@ def run_cli():
                 translation, trans_lang = vocab_service.word_service.get_translation_with_lang(word.id)
                 if translation:
                     abbrev = vocab_service.word_service.get_language_abbreviation(trans_lang) if trans_lang else "—"
-                    send_notification(f"<b>{phrase[:20]}</b> → {translation} [{abbrev}]")
+                    send_notification(f"<b>{escape(phrase[:20])}</b> → {escape(translation)} [{escape(abbrev)}]")
                 else:
-                    send_notification(f"Word saved: {phrase[:30]}")
+                    send_notification(f"Word saved: {escape(phrase[:30])}")
 
                 write_current_phrase(phrase)
             except ValueError as e:
-                send_notification(f"Invalid input: {e}")
+                send_notification(f"Invalid input: {escape(str(e))}")
             except Exception as e:
-                send_notification(f"Error: {e}")
+                send_notification(f"Error: {escape(str(e))}")
 
         if args.delete:
             phrase = read_current_phrase()
             if phrase:
                 vocab_service.word_service.delete_word(phrase)
-                send_notification(f"Word deleted: {phrase[:30]}")
+                send_notification(f"Word deleted: {escape(phrase[:30])}")
                 clear_current_phrase()
 
         if args.next:

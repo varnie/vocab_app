@@ -22,6 +22,7 @@ EMPTY_QUEUE_CHECK_SECONDS = 300
 PAUSE_CHECK_SECONDS = 60
 ERROR_RETRY_SECONDS = 60
 MAX_CONSECUTIVE_ERRORS = 3
+RECOVERY_RETRY_SECONDS = 300
 
 
 class ReviewScheduler:
@@ -37,6 +38,7 @@ class ReviewScheduler:
         notification_service: NotificationService,
         write_phrase: Callable[[str], None],
         cleanup_callback: Callable[[], None] | None = None,
+        error_callback: Callable[[], None] | None = None,
     ) -> None:
         self.review_service = review_service
         self.wotd_service = wotd_service
@@ -46,6 +48,8 @@ class ReviewScheduler:
         self._update_label = label_callback
         self._cleanup_session = cleanup_callback or (lambda: None)
         self._notification_service = notification_service
+        self._error_callback = error_callback or (lambda: None)
+        self.recovering = False
         self.paused = self.settings_service.get_setting(PAUSED_KEY, "false") == "true"
         self.running = False
         self._state = threading.Condition()
@@ -154,6 +158,9 @@ class ReviewScheduler:
                 try:
                     last_shown, deadline = self._review_once(last_shown, generation)
                     consecutive_errors = 0
+                    if self.recovering and not self.notifications_paused():
+                        self.recovering = False
+                        self._error_callback()
                 except NotificationDeliveryError:
                     consecutive_errors = 0
                     logger.warning("Notification delivery failed; retrying in %s seconds", ERROR_RETRY_SECONDS,
@@ -163,9 +170,12 @@ class ReviewScheduler:
                     consecutive_errors += 1
                     logger.exception("Review loop error (%d/%d)", consecutive_errors, MAX_CONSECUTIVE_ERRORS)
                     if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                        logger.critical("Too many review loop errors, stopping")
-                        return
-                    deadline = time.monotonic() + ERROR_RETRY_SECONDS
+                        if not self.recovering:
+                            self.recovering = True
+                            self._error_callback()
+                        deadline = time.monotonic() + RECOVERY_RETRY_SECONDS
+                    else:
+                        deadline = time.monotonic() + ERROR_RETRY_SECONDS
                 finally:
                     self._cleanup_session()
                 self._wait_until(deadline, generation)
