@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, mock_open, patch
 
+import pytest
+
 from application.service_interfaces import CEFR_LEVELS
 from application.wotd_service import WOTDService
 from domain.entities import Word, WOTDHistory
@@ -252,3 +254,35 @@ def test_wotd_candidate_expires_on_new_day(word_service, settings_service, monke
     assert service.get_word_of_the_day()[0].phrase == "hello"
     monkeypatch.setattr("application.wotd_service.today_str", lambda: "2026-10-05")
     assert service.get_word_of_the_day()[0].phrase == "world"
+
+
+@pytest.mark.parametrize("edit_when", ["before_selection", "during_translation", "before_retry"])
+def test_wotd_preserves_manual_translation(word_service, settings_service, edit_when):
+    settings_service.set_setting("wotd_enabled", "true")
+    repo = MagicMock()
+    repo.get_today.return_value = None
+    source = MagicMock()
+    source.get_word.return_value = {"word": "hello", "level": "A1"}
+    translator = MagicMock()
+    translator.translate.return_value = "machine translation"
+    service = WOTDService(settings_service, repo, word_service, translator, source)
+
+    def edit():
+        return word_service.add_word("Hello", "my translation", target_lang="ru")
+
+    if edit_when == "before_selection":
+        edit()
+    elif edit_when == "during_translation":
+        def translate(*_args):
+            edit()
+            return "machine translation"
+
+        translator.translate.side_effect = translate
+    else:
+        service.get_word_of_the_day()
+        edit()
+
+    word, _ = service.get_word_of_the_day()
+    assert word.translation == "my translation"
+    assert word_service.get_translation(word.id) == "my translation"
+    assert len(word_service.get_words()) == 1

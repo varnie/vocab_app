@@ -17,7 +17,9 @@ from domain.entities import (
 class AbstractWordRepository(ABC):
     """Abstract interface for word operations."""
 
-    def save_word(self, phrase: str, translation: str | None, target_lang: str) -> Word:
+    def save_word(
+        self, phrase: str, translation: str | None, target_lang: str, *, overwrite_translation: bool = True,
+    ) -> Word:
         raise NotImplementedError
 
     def delete_with_snapshot(self, word_id: int) -> WordSnapshot:

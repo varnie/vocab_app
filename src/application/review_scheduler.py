@@ -119,11 +119,15 @@ class ReviewScheduler:
             with self._state:
                 if not self.running:
                     return
+                generation = self._generation
             if self.notifications_paused():
                 return
             candidate = self.wotd_service.get_word_of_the_day()
             with self._state:
-                if candidate and self.running and not self.notifications_paused():
+                if (
+                    candidate and self.running and generation == self._generation
+                    and not self.notifications_paused()
+                ):
                     word, level = candidate
                     if self._notify(format_word_body(word.phrase, word.translation, None), "Word of the Day"):
                         self.wotd_service.mark_shown(word, level)

@@ -46,13 +46,16 @@ class WordManagementService:
     def add_word(
         self, phrase: str, translation: str | None = None, auto_translate: bool = False,
         *, target_lang: str | None = None, source_lang: str | None = None,
+        overwrite_translation: bool = True,
     ) -> Word:
         """Add a new word or add translation to existing word."""
         draft = self.prepare_word(
             phrase, translation, auto_translate, target_lang=target_lang, source_lang=source_lang,
         )
         if draft.translation:
-            self.word_repo.save_word(draft.phrase, draft.translation, draft.language_code)
+            self.word_repo.save_word(
+                draft.phrase, draft.translation, draft.language_code, overwrite_translation=overwrite_translation,
+            )
         else:
             self.word_repo.add(draft.phrase)
         return self._get_saved_word(draft.phrase, draft.language_code)

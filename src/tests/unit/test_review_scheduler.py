@@ -268,6 +268,29 @@ def test_wotd_consumes_day_only_after_delivery(scheduler, outcome):
     scheduler._cleanup_session.assert_called_once()
 
 
+def test_wotd_discards_result_after_settings_change_and_retries(scheduler):
+    scheduler.running = True
+    stale = Word(phrase="hello", translation="bonjour")
+
+    def translate():
+        scheduler.settings_changed()
+        return stale, "A1"
+
+    scheduler.wotd_service.get_word_of_the_day.side_effect = translate
+    scheduler._check_wotd()
+    scheduler._notify.assert_not_called()
+    scheduler.wotd_service.mark_shown.assert_not_called()
+    scheduler._write_phrase.assert_not_called()
+
+    current = Word(phrase="hello", translation="hola")
+    scheduler.wotd_service.get_word_of_the_day.side_effect = None
+    scheduler.wotd_service.get_word_of_the_day.return_value = current, "A1"
+    scheduler._check_wotd()
+    scheduler._notify.assert_called_once_with("<b>hello</b>\n→ hola", "Word of the Day")
+    scheduler.wotd_service.mark_shown.assert_called_once_with(current, "A1")
+    assert scheduler._cleanup_session.call_count == 2
+
+
 def test_settings_change_wakes_wotd_without_waiting_an_hour(scheduler, monkeypatch):
     monkeypatch.setattr("application.review_scheduler.WOTD_INITIAL_DELAY_SECONDS", 0)
     checked, repeated = threading.Event(), threading.Event()

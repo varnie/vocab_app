@@ -120,6 +120,7 @@ class WOTDService:
             result = self.word_service.add_word(
                 word, translation, auto_translate=(translation is None),
                 target_lang=target_lang, source_lang=source_lang,
+                overwrite_translation=False,
             )
             return result, True
         except Exception as e:

@@ -43,7 +43,9 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
         """Get language ORM row by code, or None if unknown."""
         return self.db.session.query(ORMLanguage).filter_by(code=code).first()
 
-    def save_word(self, phrase: str, translation: str | None, target_lang: str) -> Word:
+    def save_word(
+        self, phrase: str, translation: str | None, target_lang: str, *, overwrite_translation: bool = True,
+    ) -> Word:
         """Create a phrase and its translation in one transaction."""
         session = self.db.session
         try:
@@ -58,7 +60,8 @@ class WordRepository(AbstractWordRepository, AbstractRepository):
             if translation is not None:
                 existing = session.query(ORMTranslation).filter_by(word_id=word.id, language_id=lang.id).first()
                 if existing:
-                    existing.translation = translation
+                    if overwrite_translation:
+                        existing.translation = translation
                 else:
                     session.add(ORMTranslation(word_id=word.id, language_id=lang.id, translation=translation))
             self.commit()
