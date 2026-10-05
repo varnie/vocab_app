@@ -44,7 +44,7 @@ Window contents below use demo vocabulary; decorations and theme depend on your 
 
 ## GUI App (Recommended)
 
-Located in `src/` folder - modern GTK3 interface with system tray.
+Located in `src/`, with a GTK3 interface and system tray.
 
 ### Setup
 
@@ -52,10 +52,14 @@ Located in `src/` folder - modern GTK3 interface with system tray.
 ./setup.sh
 ```
 
-This will create a virtual environment and install all dependencies:
+This installs system packages and recreates `venv/` with access to system GTK
+bindings. It installs the Python runtime dependencies:
+
 - `requests` - HTTP library
 - `sqlalchemy` - Database ORM
 - `deep-translator` - Translation library
+
+On macOS, setup also installs `pyobjc-framework-Cocoa` for tray integration.
 
 Python 3.10 or newer is required. Test dependencies are installed separately:
 
@@ -103,9 +107,12 @@ Configure in your desktop environment settings (usually Settings → Keyboard �
 
 | Command | Purpose |
 |---------|---------|
-| `python3 /path/to/src/vocab_cli.py --save` | Save selected text |
-| `python3 /path/to/src/vocab_cli.py --delete` | Delete current word |
-| `python3 /path/to/src/vocab_cli.py --next` | Show next word |
+| `/path/to/vocab_app/venv/bin/python /path/to/vocab_app/src/vocab_cli.py --save` | Save selected text |
+| `/path/to/vocab_app/venv/bin/python /path/to/vocab_app/src/vocab_cli.py --delete` | Delete current word |
+| `/path/to/vocab_app/venv/bin/python /path/to/vocab_app/src/vocab_cli.py --next` | Show next word |
+
+Replace `/path/to/vocab_app` with the checkout path. Use its virtual-environment
+Python because desktop shortcuts do not inherit terminal activation.
 
 #### macOS
 
@@ -113,13 +120,14 @@ Configure via System Settings → Keyboard → Shortcuts → Services, or use to
 
 | Command | Purpose |
 |---------|---------|
-| `python3 /path/to/src/vocab_cli.py --save` | Save clipboard text |
-| `python3 /path/to/src/vocab_cli.py --delete` | Delete current word |
-| `python3 /path/to/src/vocab_cli.py --next` | Show next word |
+| `/path/to/vocab_app/venv/bin/python /path/to/vocab_app/src/vocab_cli.py --save` | Save clipboard text |
+| `/path/to/vocab_app/venv/bin/python /path/to/vocab_app/src/vocab_cli.py --delete` | Delete current word |
+| `/path/to/vocab_app/venv/bin/python /path/to/vocab_app/src/vocab_cli.py --next` | Show next word |
 
 ### Settings
 
-- **Review interval**: How often the background loop checks for words (30min - 8hours)
+- **Review interval**: Time between automatic word notifications (30min - 8hours).
+  If no word is eligible, the queue is checked again after five minutes.
 - **Translation provider**: Choose between Google Translate (direct), Google Translate (deep-translator), or MyMemory (free). If the selected provider fails, the app automatically falls back to the next working one.
 - **Target language**: Translation language (Russian, Spanish, French, German, Italian, Portuguese, Japanese, Chinese, Korean)
 - **Word of the Day**: Enable/disable daily word notifications with CEFR level selection (A1-C2)
@@ -201,9 +209,9 @@ during pauses and quiet hours. Word of the Day uses its own UTC-day schedule.
 
 The queue uses existing history and survives restarts. Startup adds a snooze table
 and a covering history index to existing databases; no vocabulary is rewritten.
-Exposure history remains shared across translation languages. As before, history
-is recorded when a notification is prepared; it cannot confirm that you read it.
-History and the last-exposure timestamp are now committed together.
+Exposure history remains shared across translation languages. History and the
+last-exposure timestamp are committed together only after the system accepts
+the notification. This cannot confirm that you read it.
 
 ## Troubleshooting
 
@@ -226,7 +234,9 @@ History and the last-exposure timestamp are now committed together.
 - Check that notifications are allowed for "Script Editor" in System Settings → Notifications
 
 #### Tray icon not appearing
-- GTK StatusIcon may not appear in the macOS menu bar by default. If the tray icon is missing, you can still run the app and interact via notifications and CLI commands.
+- The macOS menu bar uses native AppKit through `pyobjc-framework-Cocoa`.
+  Check that this dependency is installed in the environment used to launch the app
+  and inspect startup logs for tray initialization errors.
 
 ### General
 
@@ -236,15 +246,18 @@ History and the last-exposure timestamp are now committed together.
 
 ## Architecture
 
+Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing the project. It records
+the current design decisions, behavior to preserve, and rules for keeping the code compact.
+
 ```
 src/
 ├── application/           # Service layer (business logic)
 │   ├── export_service.py  # Export use case with injected CSV writer
 │   ├── notification_service.py
 │   ├── review_scheduler.py  # Background review loop + pause/WOTD
-│   ├── review_service.py  # Review scheduling
+│   ├── review_service.py  # Queue selection and exposure recording
 │   ├── settings_service.py
-│   ├── service_interfaces.py  # Abstract interfaces
+│   ├── service_interfaces.py  # Contracts for external adapters
 │   ├── vocab_service.py   # Named services and shared database lifecycle
 │   ├── word_service.py    # Word CRUD operations
 │   └── wotd_service.py    # Word of the Day
@@ -252,6 +265,7 @@ src/
 ├── domain/                # Domain layer (pure business rules)
 │   ├── entities.py       # Word, Language, Stats, etc.
 │   ├── exceptions.py     # TranslationError
+│   ├── review_policy.py  # Exposure intervals and new-word spacing
 │   └── repositories.py  # Abstract repository interfaces
 │
 ├── infrastructure/        # Infrastructure layer (external systems)
@@ -298,16 +312,12 @@ Review ordering is owned by the repository query, notification review tracking
 by `NotificationService`, and settings normalization by the typed settings
 getters. Bootstrap assembles all services with one shared settings service.
 
-See [the project-wide architecture review](docs/architecture-review.md) for the
-SOLID, Clean Architecture, KISS, and DRY assessment and validation limits.
-
 ## Testing
 
 ### Run tests
 
 ```bash
-source venv/bin/activate
-pytest
+venv/bin/python -m pytest
 ```
 
 ### Test structure
@@ -315,27 +325,15 @@ pytest
 ```
 src/tests/
 ├── conftest.py           # Fixtures
-├── domain/               # Domain entity tests
-│   └── test_entities.py
-├── integration/          # Integration tests
-│   └── test_repository.py
-└── unit/                 # Unit tests
-    ├── test_application_init.py
-    ├── test_config.py
-    ├── test_export_service.py
-    ├── test_review_service.py
-    ├── test_settings_service.py
-    ├── test_sqlite.py
-    ├── test_version.py
-    ├── test_vocab_cli.py
-    ├── test_vocab_service.py
-    ├── test_word_service.py
-    └── test_wotd.py
+├── domain/               # Domain entities
+├── integration/          # SQLite, user workflows, opt-in GTK and queue benchmark
+└── unit/                 # Services, adapters, scheduler, CLI and dependency boundaries
 ```
 
 ### CI
 
-Tests run automatically on GitHub Actions (see `.github/workflows/test.yml`).
+GitHub Actions runs the main test suite and a separate GTK job under Xvfb with
+`G_DEBUG=fatal-criticals` (see `.github/workflows/test.yml`).
 
 GTK integration tests are opt-in and use a temporary database. On a separate GTK3
 Broadway display:
@@ -355,8 +353,6 @@ An opt-in queue benchmark creates 10,000 words and 200,000 exposures in a tempor
 RUN_QUEUE_BENCHMARK=1 venv/bin/python -m pytest -q -s src/tests/integration/test_queue_performance.py
 ```
 
-On the development host, median selection time fell from 1051 ms before the query/index
-optimization to 163 ms after it (10 warm measurements). This synthetic benchmark
-measures selection only, not translation or notification delivery. The optimization
-uses indexed lookups for recent introductions and unseen words, avoiding repeated
-full-history aggregation without adding denormalized counters.
+The benchmark measures queue selection, excluding translation and notification
+delivery. The query uses indexed lookups for recent introductions and unseen words
+without adding denormalized counters.
